@@ -95,10 +95,23 @@ class OccupancyField:
 		self.map = map		# save this for later
 		# TODO: implement this (level 2)
 
-	def get_closest_obstacle_distance(self,x,y):
+		""" We need to find out how many coordinates there are, assign them coordinates, assign occupancy, 
+		figure out where the closest things are to each coordinate
+
+		Need to define map with the coordinates and obstacles
+
+		Need to define occ (the closest obstacle to each coordinate)
+			This is tricky for dynamic environments!  
+		"""
+
+	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
 		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
 			is out of the map boundaries, nan will be returned. """
 		# TODO: implement this 
+
+		""" We need to define where we are, make sure we're actually in the map
+
+		"""
 
 class ParticleFilter:
 	""" The class that represents a Particle Filter ROS Node
@@ -139,6 +152,10 @@ class ParticleFilter:
 		self.laser_max_distance = 2.0	# maximum penalty to assess in the likelihood field model
 
 		# TODO: define additional constants if needed
+		""" May need to adjust thresh values if robot is to be still.  
+		May need to reduce number of particles.
+		Dynamic Variables vs. Static Variables, will these be different?
+		"""
 
 		# Setup pubs and subs
 
@@ -161,6 +178,7 @@ class ParticleFilter:
 		# request the map from the map server, the map should be of type nav_msgs/OccupancyGrid
 		# TODO: fill in the appropriate service call here.  The resultant map should be assigned be passed
 		#		into the init method for OccupancyField
+		""" Call the map """
 
 		self.occupancy_field = OccupancyField(map)
 		self.initialized = True
@@ -173,6 +191,7 @@ class ParticleFilter:
 		"""
 		# TODO: assign the lastest pose into self.robot_pose as a geometry_msgs.Pose object
 
+		"""We need to update particle pose, not robot pose"""
 		# first make sure that the particle weights are normalized
 		self.normalize_particles()
 
@@ -189,11 +208,15 @@ class ParticleFilter:
 			return
 
 		# TODO: modify particles using delta
+		"""DON'T NEED THIS"""
+
 		# For added difficulty: Implement sample_motion_odometry (Prob Rob p 136)
 
 	def map_calc_range(self,x,y,theta):
 		""" Difficulty Level 3: implement a ray tracing likelihood model... Let me know if you are interested """
 		# TODO: nothing unless you want to try this alternate likelihood model
+		""" us?"""
+
 		pass
 
 	def resample_particles(self):
@@ -201,10 +224,14 @@ class ParticleFilter:
 		# make sure the distribution is normalized
 		self.normalize_particles()
 		# TODO: fill out the rest of the implementation
+		"""Update bayes, calls update_particles_with_laser"""
 
 	def update_particles_with_laser(self, msg):
 		""" Updates the particle weights in response to the scan contained in the msg """
 		# TODO: implement this
+
+		"""Update our data"""
+
 		pass
 
 	@staticmethod
@@ -258,6 +285,7 @@ class ParticleFilter:
 			xy_theta = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
 		self.particle_cloud = []
 		# TODO create particles
+		"""Call particle class"""
 
 		self.normalize_particles()
 		self.update_robot_pose()
@@ -265,6 +293,7 @@ class ParticleFilter:
 	def normalize_particles(self):
 		""" Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
 		# TODO: implement this
+		"""Gaussian"""
 
 	def publish_particles(self, msg):
 		particles_conv = []
@@ -289,6 +318,7 @@ class ParticleFilter:
 			# need to know how to transform between base and odometric frames
 			# this will eventually be published by either Gazebo or neato_node
 			return
+		"""TO DO"""	
 
 		# calculate pose of laser relative ot the robot base
 		p = PoseStamped(header=Header(stamp=rospy.Time(0),frame_id=msg.header.frame_id))
