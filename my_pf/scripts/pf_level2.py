@@ -189,6 +189,8 @@ class ParticleFilter:
 		# TODO4: fill in the appropriate service call here.  The resultant map should be assigned be passed
 		#		into the init method for OccupancyField
 		""" Call the map """
+		#rospy call to map "GetMap" imported from nav_msgs
+		#set map as called map
 
 		self.occupancy_field = OccupancyField(map)
 		self.initialized = True
@@ -199,11 +201,24 @@ class ParticleFilter:
 				(1): compute the mean pose (level 2)
 				(2): compute the most likely pose (i.e. the mode of the distribution) (level 1)
 		"""
-		# TODO5: assign the lastest pose into self.robot_pose as a geometry_msgs.Pose object
+		# TODO: assign the lastest pose into self.robot_pose as a geometry_msgs.Pose object
 
 		"""We need to update particle pose, not robot pose"""
 		# first make sure that the particle weights are normalized
 		self.normalize_particles()
+
+	def update_particle_pos(self):
+		""" Update the estimate of the particle position based on the velocity vector created
+		"""
+		# TODO5: assign the lastest particle position into self.SOMETHING WE NEED TO FIGURE OUT as a geometry_msgs.Pose object
+
+		"""We need to update particle pose"""
+		# first make sure that the particle weights are normalized
+		self.normalize_particles()
+		########PSUEDO CODE############
+		#math for x and y components
+		#add x and y components of the velocity vector to appropriate position of particles
+		#reset particle positions with new values
 
 	def update_particles_with_odom(self, msg):
 		""" Implement a simple version of this (Level 1) or a more complex one (Level 2) """
@@ -308,10 +323,13 @@ class ParticleFilter:
 
 		self.normalize_particles()
 		self.update_robot_pose()
+		self.update_particle_pos()
 
 	def normalize_particles(self):
 		""" Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
 		# TODO10: implement this
+		########PSUEDO CODE############
+		#
 		"""Gaussian"""
 
 	def publish_particles(self, msg):
@@ -364,6 +382,7 @@ class ParticleFilter:
 			self.update_particles_with_laser(msg)	# update based on laser scan
 			self.resample_particles()				# resample particles to focus on areas of high density
 			self.update_robot_pose()				# update robot's pose
+			self.update_particle_pos()
 			self.fix_map_to_odom_transform(msg)		# update map to odom transform now that we have new particles
 		# publish particles (so things like rviz can see them)
 		self.publish_particles(msg)
