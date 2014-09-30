@@ -344,8 +344,27 @@ class ParticleFilter:
 		###################PSUDEOCODE####################
 		#explode the triple of xy_theta
 		#assign initial weights as 0.5
-		#for i in range(self.n_particles):
-			#self.particle_cloud.append(Particle(x, y, theta, w))
+		# TODO create particles
+		xcount = -0.180
+		ycount = 0.180
+		for i in range(self.n_particles):
+			self.particle_cloud.append(Particle(xy_theta[0]+xcount, xy_theta[1]+ycount, xy_theta[2]))
+			self.particle_cloud.append(Particle(-(xy_theta[0]-xcount), -(xy_theta[1]+ycount), xy_theta[2]))
+			xcount += 0.001
+			ycount -= 0.001
+			#creates a mass of particles centered at 0,0 that point in every direction
+		# import numpy as np
+
+		# #precomputed (depends on the dimensions of your grid)
+		# x = np.arange(50) # x values
+		# y = np.arange(50) # y values
+		# xx, yy = np.meshgrid(x, y) # combine both vectors
+
+		# # for this particular circle
+		# cx, cy, r = 10, 10, 5
+
+		# condition = (xx-cx)**2 + (yy-cy)**2 <= r**2
+		# points = xx[condition] + 1j*yy[condition] )
 
 		self.normalize_particles()
 		self.update_robot_pose()
