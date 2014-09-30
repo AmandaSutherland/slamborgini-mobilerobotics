@@ -264,8 +264,18 @@ class ParticleFilter:
 		# TODO8: implement this
 		"""Update our data  use laser_subscriber msg, similar to in simple behaviors"""
 		##########PSUEDOCODE###################
-		#
+		#for i in range(self.n_particles):
+			#self.particle_cloud.append(msg.ranges[i])
 
+		#Potentially process for certain distances, like:
+		#for i in range(self.n_particles):
+			#if msg.ranges[i] < max_val:
+				#new static prob given that it exists is 1, update bayes
+				#new dynamic prob given that it exists is 0, update bayes
+			#else:
+				#new static prob given that it doesn't exist is 0, update bayes
+				#new dynamic prob given that it doesn't exist is 1, update bayes
+			#publish to self.static, self.dynamic
 		pass
 
 	@staticmethod
@@ -320,6 +330,11 @@ class ParticleFilter:
 		self.particle_cloud = []
 		# TODO9 create particles
 		"""Call particle class"""
+		###################PSUDEOCODE####################
+		#explode the triple of xy_theta
+		#assign initial weights as 0.5
+		#for i in range(self.n_particles):
+			#self.particle_cloud.append(Particle(x, y, theta, w))
 
 		self.normalize_particles()
 		self.update_robot_pose()
@@ -344,18 +359,21 @@ class ParticleFilter:
 			I hope it will provide a good guide.  The input msg is an object of type sensor_msgs/LaserScan """
 		if not(self.initialized):
 			# wait for initialization to complete
+			#spin ros?
 			return
 
 		if not(self.tf_listener.canTransform(self.base_frame,msg.header.frame_id,msg.header.stamp)):
 			# need to know how to transform the laser to the base frame
 			# this will be given by either Gazebo or neato_node
+			#read from Gazebo or neato_node
 			return
 
 		if not(self.tf_listener.canTransform(self.base_frame,self.odom_frame,msg.header.stamp)):
 			# need to know how to transform between base and odometric frames
 			# this will eventually be published by either Gazebo or neato_node
+			#read from Gavebo or neat_node
 			return
-		"""TO DO"""	
+		"""TODO11"""	
 
 		# calculate pose of laser relative ot the robot base
 		p = PoseStamped(header=Header(stamp=rospy.Time(0),frame_id=msg.header.frame_id))
