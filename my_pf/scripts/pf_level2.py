@@ -113,11 +113,19 @@ class OccupancyField:
 		Need to define occ (the closest obstacle to each coordinate)
 			This is tricky for dynamic environments!  
 		"""
+		#create empty array of coordinates of grid cells in map (numpy array would be good)
+		#create array of coordinates of occuppied grid cells 
+		#determine which things are objects(?)
+		
 
 	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
 		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
 			is out of the map boundaries, nan will be returned. """
 		# TODO2: implement this 
+
+		#find closest x and y (use x and y of where the robot pose is, and the particle postions found in above function)
+		#check if they are outside the map bounds (check if greater than map width/height or less than 0)
+		#put these x and y values together and call them the closest obstacle
 
 		""" We need to define where we are, make sure we're actually in the map
 
@@ -162,6 +170,9 @@ class ParticleFilter:
 		self.laser_max_distance = 2.0	# maximum penalty to assess in the likelihood field model
 
 		# TODO3: define additional constants if needed
+
+		#this seems pretty self explanatory. 
+
 		""" May need to adjust thresh values if robot is to be still.  
 		May need to reduce number of particles.
 		Dynamic Variables vs. Static Variables, will these be different?
