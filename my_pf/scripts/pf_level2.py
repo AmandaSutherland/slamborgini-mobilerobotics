@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 
+"""
+As of September 29, 2014 Claire, Victoria and Amanda have done pseudo code for 24
+distinct TODOs split as following:
+
+1-3 Amanda
+4-6 Claire
+7-10 Victoria
+
+"""
+
 import rospy
 
 from std_msgs.msg import Header, String
@@ -93,7 +103,7 @@ class OccupancyField:
 
 	def __init__(self, map):
 		self.map = map		# save this for later
-		# TODO: implement this (level 2)
+		# TODO1: implement this (level 2)
 
 		""" We need to find out how many coordinates there are, assign them coordinates, assign occupancy, 
 		figure out where the closest things are to each coordinate
@@ -107,7 +117,7 @@ class OccupancyField:
 	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
 		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
 			is out of the map boundaries, nan will be returned. """
-		# TODO: implement this 
+		# TODO2: implement this 
 
 		""" We need to define where we are, make sure we're actually in the map
 
@@ -151,7 +161,7 @@ class ParticleFilter:
 
 		self.laser_max_distance = 2.0	# maximum penalty to assess in the likelihood field model
 
-		# TODO: define additional constants if needed
+		# TODO3: define additional constants if needed
 		""" May need to adjust thresh values if robot is to be still.  
 		May need to reduce number of particles.
 		Dynamic Variables vs. Static Variables, will these be different?
@@ -176,7 +186,7 @@ class ParticleFilter:
 		self.current_odom_xy_theta = []
 
 		# request the map from the map server, the map should be of type nav_msgs/OccupancyGrid
-		# TODO: fill in the appropriate service call here.  The resultant map should be assigned be passed
+		# TODO4: fill in the appropriate service call here.  The resultant map should be assigned be passed
 		#		into the init method for OccupancyField
 		""" Call the map """
 
@@ -189,7 +199,7 @@ class ParticleFilter:
 				(1): compute the mean pose (level 2)
 				(2): compute the most likely pose (i.e. the mode of the distribution) (level 1)
 		"""
-		# TODO: assign the lastest pose into self.robot_pose as a geometry_msgs.Pose object
+		# TODO5: assign the lastest pose into self.robot_pose as a geometry_msgs.Pose object
 
 		"""We need to update particle pose, not robot pose"""
 		# first make sure that the particle weights are normalized
@@ -214,7 +224,7 @@ class ParticleFilter:
 
 	def map_calc_range(self,x,y,theta):
 		""" Difficulty Level 3: implement a ray tracing likelihood model... Let me know if you are interested """
-		# TODO: nothing unless you want to try this alternate likelihood model
+		# TODO6: nothing unless you want to try this alternate likelihood model
 		""" us?"""
 
 		pass
@@ -223,14 +233,23 @@ class ParticleFilter:
 		""" Resample the particles according to the new particle weights """
 		# make sure the distribution is normalized
 		self.normalize_particles()
-		# TODO: fill out the rest of the implementation
-		"""Update bayes, calls update_particles_with_laser"""
+		# TODO7: fill out the rest of the implementation
+		#Update bayes, calls update_particles_with_laser
+		########PSUEDO CODE############
+		#find the probability of being in the spot, given the data
+			#P(B|A) * P(A))/P(B)
+		#find the probability of not being in the spot, given data
+			#P(B|A) * P(A))/P(B)
+		#find the ratio of the probabilities to give the true probability
+		#return the liklihood of being in that spot given the particles
+
 
 	def update_particles_with_laser(self, msg):
 		""" Updates the particle weights in response to the scan contained in the msg """
-		# TODO: implement this
-
-		"""Update our data"""
+		# TODO8: implement this
+		"""Update our data  use laser_subscriber msg, similar to in simple behaviors"""
+		##########PSUEDOCODE###################
+		#
 
 		pass
 
@@ -284,7 +303,7 @@ class ParticleFilter:
 		if xy_theta == None:
 			xy_theta = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
 		self.particle_cloud = []
-		# TODO create particles
+		# TODO9 create particles
 		"""Call particle class"""
 
 		self.normalize_particles()
@@ -292,7 +311,7 @@ class ParticleFilter:
 
 	def normalize_particles(self):
 		""" Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
-		# TODO: implement this
+		# TODO10: implement this
 		"""Gaussian"""
 
 	def publish_particles(self, msg):
