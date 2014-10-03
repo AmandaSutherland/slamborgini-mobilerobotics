@@ -116,6 +116,45 @@ class OccupancyField:
 		#create empty array of coordinates of grid cells in map (numpy array would be good)
 		#create array of coordinates of occuppied grid cells 
 		#determine which things are objects(?)
+
+		X = np.zeros((self.map.info.width*self.map.info.height,2))
+
+			# while we're at it let's count the number of occupied cells
+			total_occupied = 0
+			curr = 0
+			for i in range(self.map.info.width):
+				for j in range(self.map.info.height):
+					# occupancy grids are stored in row major order, if you go through this right, you might be able to use curr
+					ind = i + j*self.map.info.width
+					if self.map.data[ind] > 0:
+						total_occupied += 1
+					X[curr,0] = float(i)
+					X[curr,1] = float(j)
+					curr += 1
+
+			# build up a numpy array of the coordinates of each occupied grid cell in the map
+			O = np.zeros((total_occupied,2))
+			curr = 0
+			for i in range(self.map.info.width):
+				for j in range(self.map.info.height):
+					# occupancy grids are stored in row major order, if you go through this right, you might be able to use curr
+					ind = i + j*self.map.info.width
+					if self.map.data[ind] > 0:
+						O[curr,0] = float(i)
+						O[curr,1] = float(j)
+						curr += 1
+
+			# use super fast scikit learn nearest neighbor algorithm
+			nbrs = NearestNeighbors(n_neighbors=1,algorithm="ball_tree").fit(O)
+			distances, indices = nbrs.kneighbors(X)
+
+			self.closest_occ = {}
+			curr = 0
+			for i in range(self.map.info.width):
+				for j in range(self.map.info.height):
+					ind = i + j*self.map.info.width
+					self.closest_occ[ind] = distances[curr]*self.map.info.resolution
+					curr += 1
 		
 
 	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
@@ -126,6 +165,20 @@ class OccupancyField:
 		#find closest x and y (use x and y of where the robot pose is, and the particle postions found in above function)
 		#check if they are outside the map bounds (check if greater than map width/height or less than 0)
 		#put these x and y values together and call them the closest obstacle
+
+		x_coord = int((x - self.map.info.origin.position.x)/self.map.info.resolution)
+			y_coord = int((y - self.map.info.origin.position.y)/self.map.info.resolution)
+
+			# check if we are in bounds
+			if x_coord > self.map.info.width or x_coord < 0:
+				return float('nan')
+			if y_coord > self.map.info.height or y_coord < 0:
+				return float('nan')
+
+			ind = x_coord + y_coord*self.map.info.width
+			if ind >= self.map.info.width*self.map.info.height or ind < 0:
+				return float('nan')
+			return self.closest_occ[ind]
 
 		""" We need to define where we are, make sure we're actually in the map
 
