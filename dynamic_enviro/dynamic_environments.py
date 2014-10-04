@@ -5,7 +5,7 @@ October 3, 2014 - Adjustments were made to Paul's particle filter code
 to gather all the statements which interact with gazebo, rviz, or 
 various rostopics.  The rest is a pseudo code structure.
 
-October 4, 2014 - C+V: 
+October 4, 2014 - C+V: Finished formatting base code form Paul's inclass example (with some minor adjustments and renamings, and from pf_code that seemed useful, especially the transforms). Tested code - results was:
 
 """
 #interfaces with ROS and Python
@@ -14,7 +14,7 @@ import rospy
 from std_msgs.msg import Header, String
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
-from nav_msgs.srv import GetMap
+from nav_msgs.msg import OccupancyGrid
 #Broadcaster/reciever information
 import tf
 from tf import TransformListener
@@ -127,7 +127,7 @@ class RunMapping:
 	def is_in_map(self, x, y):
 		"Returns boolean of whether or not a point is within map boundaries"
 		#return if x is less than the origin, or larger than the map, ditto for y
-		return not(x < self.origin[0] or x > self.origin[0] + self.n*self.resolution or y<self.origin[1] or y>self.origin[1] + self.n*self.resolution)
+		return (x < self.origin[0] or x > self.origin[0] + self.n*self.resolution or y<self.origin[1] or y>self.origin[1] + self.n*self.resolution)
 
 	def scan_received(self, msg):
 			""" Returns an occupancy grid to publish data to map"""	
@@ -138,171 +138,95 @@ class RunMapping:
 		# store the the odometry pose in a more convenient format (x,y,theta)
 		self.odom_pose = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
 
-		#get laser data
-		#get position
-		#get step along the way (so which time in terms of bayesian)
-		#make sure data is in the map, you are in the map
-		#update odds ratios
-		#publish new ratios to the occupancy field
+		for degree in range(360):
+			if msg.ranges[degree] > 0.0 and msg.ranges[degree] < 5.0:
+				#gets the position of the laser data points
+				data_x = self.odom_pose[0] + msg.ranges[degree]*cos(degree*pi/180.0 + self.odom_pose[2])
+				data_y = self.odom_pose[1] + msg.ranges[degree]*sin(degree*pi/180+self.odom[2])
 
+				#maps laser data to a pixel in the map
+				datax_pixel = int((data_x - self.origin[0])/self.resolution)
+				datay_pixel = int((data_y - self.origin[1])/self.resolution)
 
+				#maps the robot to a position
+				robot = (data_x - self.odom_pose[0], data_y - self.odom_pose[1])
 
+				#finds how far away the point is from the robot
+				magnitude = sqrt(robot[0]**2 + robot[1]**2)
 
-class ParticleFilter:
-	""" The class that represents a Particle Filter ROS Node
-		Attributes list:
-			initialized: a Boolean flag to communicate to other class methods that initializaiton is complete
-			base_frame: the name of the robot base coordinate frame (should be "base_link" for most robots)
-			map_frame: the name of the map coordinate frame (should be "map" in most cases)
-			odom_frame: the name of the odometry coordinate frame (should be "odom" in most cases)
-			scan_topic: the name of the scan topic to listen to (should be "scan" in most cases)
-			n_particles: the number of particles in the filter
-			d_thresh: the amount of linear movement before triggering a filter update
-			a_thresh: the amount of angular movement before triggering a filter update
-			laser_max_distance: the maximum distance to an obstacle we should use in a likelihood calculation
-			pose_listener: a subscriber that listens for new approximate pose estimates (i.e. generated through the rviz GUI)
-			particle_pub: a publisher for the particle cloud
-			laser_subscriber: listens for new scan data on topic self.scan_topic
-			tf_listener: listener for coordinate transforms
-			tf_broadcaster: broadcaster for coordinate transforms
-			particle_cloud: a list of particles representing a probability distribution over robot poses
-			current_odom_xy_theta: the pose of the robot in the odometry frame when the last filter update was performed.
-								   The pose is expressed as a list [x,y,theta] (where theta is the yaw)
-			map: the map we will be localizing ourselves in.  The map should be of type nav_msgs/OccupancyGrid
-	"""
-	def __init__(self):
-		self.initialized = False		# make sure we don't perform updates before everything is setup
-		rospy.init_node('pf')			# tell roscore that we are creating a new node named "pf"
+				#converts magnitude and robot position to pixels in the map
+				n_steps = max([1, int(ceil(magnitude/self.resolution))])
+				robot_step = (robot[0]/(n_steps-1), robot[1]/(n_steps-1))
+				marked = set()
 
-		self.base_frame = "base_link"	# the frame of the robot base
-		self.map_frame = "map"			# the name of the map coordinate frame
-		self.odom_frame = "odom"		# the name of the odometry coordinate frame
-		self.scan_topic = "scan"		# the topic where we will get laser scans from 
+				for pixel in range(n_steps):
+					curr_x = self.odom_pose[0] + pixel*robot_step[0]
+					curr_y = self.odom_pose[1] + pixel*robot_step[1]
+					if (self.is_in_map(curr_x, curr_y)):
+						#make sure its in the map
+						break
 
-		self.n_particles = 300			# the number of particles to use
-
-		self.d_thresh = 0.2				# the amount of linear movement before performing an update
-		self.a_thresh = math.pi/6		# the amount of angular movement before performing an update
-
-		self.laser_max_distance = 2.0	# maximum penalty to assess in the likelihood field model
-
-		# TODO3: define additional constants if needed
-
-		#this seems pretty self explanatory. 
-
-		""" May need to adjust thresh values if robot is to be still.  
-		May need to reduce number of particles.
-		Dynamic Variables vs. Static Variables, will these be different?
-		"""
-
-		# Setup pubs and subs
-
-		# pose_listener responds to selection of a new approximate robot location (for instance using rviz)
-		self.pose_listener = rospy.Subscriber("initialpose", PoseWithCovarianceStamped, self.update_initial_pose)
-		# publish the current particle cloud.  This enables viewing particles in rviz.
-		self.particle_pub = rospy.Publisher("particlecloud", PoseArray)
-
-		# laser_subscriber listens for data from the lidar
+					x_ind = int((curr_x - self.origin[0])/self.resolution)
+					y_ind = int((curr_y - self.origin[1])/self.resolution)
+					if x_ind == datax_pixel and y_ind==datay_pixel:
+						break
+					if ((x_ind, y_ind) in marked):
+						self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self/p_occ) * self.odds_ratio_miss
+						marked.add((x_ind, y_ind))
+				if self.is_in_map(data_x, data_y):
+					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
 		
+		self.seq += 1
+		if self.seq % 5 == 0:
+			map = OccupancyGrid() #this is a nav msg class
+			map.header.seq = self.seq
+			map.header.stamp = msg.header.stamp
+			map.header.frame_id = "map"
+			map.info.origin.position.x = self.origin[0]
+			map.info.origin.position.y = self.origin[1]
+			map.info.width = self.n
+			map.info.height = self.n
+			map.info.resolution = self.resolution
+			map.data = [0]*self.n**2 #the zero is a formatter, not a multiple of 0
+			for i in range(self.n):
+				#this is giving us the i,j grid square, occupancy grid
+				for j in range(self.n):
+					idx = i+self.n*j #makes horizontal rows (i is x, j is y)
+					if self.odds_ratios[i,j] < 1/5.0:
+						map.data[idx] = 0 #makes the gray
+					elif self.odds_ratios[i,j] > 5.0:
+						map.data[idx] = 100 #makes the black walls
+					else:
+						map.data[idx] = -1 #makes unknown
+			self.pub.publish(map)
 
-		self.particle_cloud = []
+		image = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
+		#.shape() comes from being related to the np class
+		for i in range(image.shape[0]):
+			for j in range(image.shape[1]):
+				if self.odds_ratios[i,j] < 1/5.0:
+					image[i,j,:] = 1.0 #makes gray
+				elif self.odds_ratios[i,j] > 5.0:
+					image[i,j,:] = 0.0 #makes walls
+				else:
+					image[i,j,:] = 0.5 #none	
 
-		self.current_odom_xy_theta = []
+		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
+		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
 
-		# request the map from the map server, the map should be of type nav_msgs/OccupancyGrid
-		# TODO4: fill in the appropriate service call here.  The resultant map should be assigned be passed
-		#		into the init method for OccupancyField
-		""" Call the map """
-		#rospy call to map "GetMap" imported from nav_msgs
-		#set map as called map
+		#draw it!
+		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255, 0, 0))
+		cv2.imshow("map", cv2.resize(image,(500,500)))
+		cv2.waitKey(20) #effectively a delay
 
-		self.occupancy_field = OccupancyField(map)
-		self.initialized = True
+	def run(self):
+		r = rospy.Rate(10)
+		while not(rospy.is_shutdown()):
+			r.sleep()
 
-	def update_robot_pose(self):
-		""" Update the estimate of the robot's pose given the updated particles.
-			There are two logical methods for this:
-				(1): compute the mean pose (level 2)
-				(2): compute the most likely pose (i.e. the mode of the distribution) (level 1)
-		"""
-		# TODO: assign the lastest pose into self.robot_pose as a geometry_msgs.Pose object
-
-		"""We need to update particle pose, not robot pose"""
-		# first make sure that the particle weights are normalized
-		self.normalize_particles()
-
-	def map_calc_range(self,x,y,theta):
-		""" Difficulty Level 3: implement a ray tracing likelihood model... Let me know if you are interested """
-		# TODO6: nothing unless you want to try this alternate likelihood model
-		""" us?"""
-
-		pass
-
-
-
-	@staticmethod
-	def angle_normalize(z):
-		""" convenience function to map an angle to the range [-pi,pi] """
-		return math.atan2(math.sin(z), math.cos(z))
-
-	@staticmethod
-	def angle_diff(a, b):
-		""" Calculates the difference between angle a and angle b (both should be in radians)
-			the difference is always based on the closest rotation from angle a to angle b
-			examples:
-				angle_diff(.1,.2) -> -.1
-				angle_diff(.1, 2*math.pi - .1) -> .2
-				angle_diff(.1, .2+2*math.pi) -> -.1
-		"""
-		a = ParticleFilter.angle_normalize(a)
-		b = ParticleFilter.angle_normalize(b)
-		d1 = a-b
-		d2 = 2*math.pi - math.fabs(d1)
-		if d1 > 0:
-			d2 *= -1.0
-		if math.fabs(d1) < math.fabs(d2):
-			return d1
-		else:
-			return d2
-
-	@staticmethod
-	def weighted_values(values, probabilities, size):
-		""" Return a random sample of size elements form the set values with the specified probabilities
-			values: the values to sample from (numpy.ndarray)
-			probabilities: the probability of selecting each element in values (numpy.ndarray)
-			size: the number of samples
-		"""
-		bins = np.add.accumulate(probabilities)
-		return values[np.digitize(random_sample(size), bins)]
-
-	def update_initial_pose(self, msg):
-		""" Callback function to handle re-initializing the particle filter based on a pose estimate.
-			These pose estimates could be generated by another ROS Node or could come from the rviz GUI """
-		xy_theta = TransformHelpers.convert_pose_to_xy_and_theta(msg.pose.pose)
-		self.initialize_particle_cloud(xy_theta)
-		self.fix_map_to_odom_transform(msg)
-
-
-
-	def fix_map_to_odom_transform(self, msg):
-		""" Super tricky code to properly update map to odom transform... do not modify this... Difficulty level infinity. """
-		(translation, rotation) = TransformHelpers.convert_pose_inverse_transform(self.robot_pose)
-		p = PoseStamped(pose=TransformHelpers.convert_translation_rotation_to_pose(translation,rotation),header=Header(stamp=msg.header.stamp,frame_id=self.base_frame))
-		self.odom_to_map = self.tf_listener.transformPose(self.odom_frame, p)
-		(self.translation, self.rotation) = TransformHelpers.convert_pose_inverse_transform(self.odom_to_map.pose)
-
-	def broadcast_last_transform(self):
-		""" Make sure that we are always broadcasting the last map to odom transformation.
-			This is necessary so things like move_base can work properly. """
-		if not(hasattr(self,'translation') and hasattr(self,'rotation')):
-			return
-		self.tf_broadcaster.sendTransform(self.translation, self.rotation, rospy.get_rostime(), self.odom_frame, self.map_frame)
 
 if __name__ == '__main__':
-	n = RunMapping()
-	r = rospy.Rate(5)
-
-	while not(rospy.is_shutdown()):
-		# in the main loop all we do is continuously broadcast the latest map to odom transform
-		n.broadcast_last_transform()
-		r.sleep()
+	try:
+		n = RunMapping()
+		n.run()
+	except rospy.ROSInterruptException: pass
