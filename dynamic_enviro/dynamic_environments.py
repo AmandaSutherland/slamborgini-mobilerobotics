@@ -13,7 +13,7 @@ import rospy
 #Getting topics from ROS
 from std_msgs.msg import Header, String
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion, Vector3
 from nav_msgs.msg import OccupancyGrid
 #Broadcaster/reciever information
 import tf
@@ -26,6 +26,7 @@ import time
 import cv2 #openCV used to make window for publishing data
 import numpy as np
 from numpy.random import random_sample
+from matplotlib.pyplot import imshow
 from sklearn.neighbors import NearestNeighbors
 
 class TransformHelpers:
@@ -33,28 +34,28 @@ class TransformHelpers:
 	world to the script and back.  Will only be useful for us if we add an autonomy
 	function to the robot """
 
-	@staticmethod
-	def convert_translation_rotation_to_pose(translation, rotation):
-		""" Convert from representation of a pose as translation and rotation (Quaternion) tuples to a geometry_msgs/Pose message """
-		return Pose(position=Point(x=translation[0],y=translation[1],z=translation[2]), orientation=Quaternion(x=rotation[0],y=rotation[1],z=rotation[2],w=rotation[3]))
+	# @staticmethod
+	# def convert_translation_rotation_to_pose(translation, rotation):
+	# 	""" Convert from representation of a pose as translation and rotation (Quaternion) tuples to a geometry_msgs/Pose message """
+	# 	return Pose(position=Point(x=translation[0],y=translation[1],z=translation[2]), orientation=Quaternion(x=rotation[0],y=rotation[1],z=rotation[2],w=rotation[3]))
 
-	@staticmethod
-	def convert_pose_inverse_transform(pose):
-		""" Helper method to invert a transform (this is built into the tf C++ classes, but ommitted from Python) """
-		translation = np.zeros((4,1))
-		translation[0] = -pose.position.x
-		translation[1] = -pose.position.y
-		translation[2] = -pose.position.z
-		translation[3] = 1.0
+	# @staticmethod
+	# def convert_pose_inverse_transform(pose):
+	# 	""" Helper method to invert a transform (this is built into the tf C++ classes, but ommitted from Python) """
+	# 	translation = np.zeros((4,1))
+	# 	translation[0] = -pose.position.x
+	# 	translation[1] = -pose.position.y
+	# 	translation[2] = -pose.position.z
+	# 	translation[3] = 1.0
 
-		rotation = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
-		euler_angle = euler_from_quaternion(rotation)
-		rotation = np.transpose(rotation_matrix(euler_angle[2], [0,0,1]))		# the angle is a yaw
-		transformed_translation = rotation.dot(translation)
+	# 	rotation = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
+	# 	euler_angle = euler_from_quaternion(rotation)
+	# 	rotation = np.transpose(rotation_matrix(euler_angle[2], [0,0,1]))		# the angle is a yaw
+	# 	transformed_translation = rotation.dot(translation)
 
-		translation = (transformed_translation[0], transformed_translation[1], transformed_translation[2])
-		rotation = quaternion_from_matrix(rotation)
-		return (translation, rotation)
+	# 	translation = (transformed_translation[0], transformed_translation[1], transformed_translation[2])
+	# 	rotation = quaternion_from_matrix(rotation)
+	# 	return (translation, rotation)
 
 	@staticmethod
 	def convert_pose_to_xy_and_theta(pose):
@@ -73,10 +74,11 @@ class RunMapping:
 			closest_occ: the distance for each entry in the OccupancyGrid to the closest obstacle
 	"""
 
-	def __init__(self, map):
-		rospy.init_node("grid")	
-		#create map properties, helps to make ratio calcs
+	def __init__(self):
 		cv2.namedWindow("map")
+		rospy.init_node("run_mapping")	
+		#create map properties, helps to make ratio calcs
+		
 		self.origin = [-10,-10]
 		self.seq = 0
 		self.resolution = 0.1
@@ -90,11 +92,10 @@ class RunMapping:
 		
 		#write laser pubs and subs
 		rospy.Subscriber("scan", LaserScan, self.scan_received, queue_size=1)
-		rospy.Publisher("map", OccupancyGrid)
+		self.pub = rospy.Publisher("map", OccupancyGrid)
 
 		#note - in case robot autonomy is added back in
-		tf_listener = TransformListener()
-		tf_broadcaster = TransformBroadcaster()	
+		self.tf_listener = TransformListener()	
 
 		# use super fast scikit learn nearest neighbor algorithm
 		# nbrs = NearestNeighbors(n_neighbors=1,algorithm="ball_tree").fit(O)
@@ -106,12 +107,11 @@ class RunMapping:
 		# 		ind = i + j*self.map.info.width
 		# 		self.closest_occ[ind] = distances[curr]*self.map.info.resolution
 		# 		curr += 1
-		
-
+	
 	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
 		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
 			is out of the map boundaries, nan will be returned. """
-			pass
+		pass
 			# x_coord = int((x - self.map.info.origin.position.x)/self.map.info.resolution)
 			# y_coord = int((y - self.map.info.origin.position.y)/self.map.info.resolution)
 			# # check if we are in bounds
@@ -130,19 +130,20 @@ class RunMapping:
 		return (x < self.origin[0] or x > self.origin[0] + self.n*self.resolution or y<self.origin[1] or y>self.origin[1] + self.n*self.resolution)
 
 	def scan_received(self, msg):
-			""" Returns an occupancy grid to publish data to map"""	
+		""" Returns an occupancy grid to publish data to map"""	
+		if len(msg.ranges) != 360:
+			return
 
 		#make a pose stamp that relates to the odom of the robot
 		p = PoseStamped(header=Header(stamp=msg.header.stamp,frame_id="base_link"), pose=Pose())
 		self.odom_pose = self.tf_listener.transformPose("odom", p)
-		# store the the odometry pose in a more convenient format (x,y,theta)
+		# convert the odom pose to the tuple (x,y,theta)
 		self.odom_pose = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
-
 		for degree in range(360):
 			if msg.ranges[degree] > 0.0 and msg.ranges[degree] < 5.0:
 				#gets the position of the laser data points
-				data_x = self.odom_pose[0] + msg.ranges[degree]*cos(degree*pi/180.0 + self.odom_pose[2])
-				data_y = self.odom_pose[1] + msg.ranges[degree]*sin(degree*pi/180+self.odom[2])
+				data_x = self.odom_pose[0] + msg.ranges[degree]*math.cos(degree*math.pi/180.0 + self.odom_pose[2])
+				data_y = self.odom_pose[1] + msg.ranges[degree]*math.sin(degree*math.pi/180+self.odom_pose[2])
 
 				#maps laser data to a pixel in the map
 				datax_pixel = int((data_x - self.origin[0])/self.resolution)
@@ -152,10 +153,10 @@ class RunMapping:
 				robot = (data_x - self.odom_pose[0], data_y - self.odom_pose[1])
 
 				#finds how far away the point is from the robot
-				magnitude = sqrt(robot[0]**2 + robot[1]**2)
+				magnitude = math.sqrt(robot[0]**2 + robot[1]**2)
 
 				#converts magnitude and robot position to pixels in the map
-				n_steps = max([1, int(ceil(magnitude/self.resolution))])
+				n_steps = max([1, int(math.ceil(magnitude/self.resolution))])
 				robot_step = (robot[0]/(n_steps-1), robot[1]/(n_steps-1))
 				marked = set()
 
@@ -170,16 +171,17 @@ class RunMapping:
 					y_ind = int((curr_y - self.origin[1])/self.resolution)
 					if x_ind == datax_pixel and y_ind==datay_pixel:
 						break
-					if ((x_ind, y_ind) in marked):
-						self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self/p_occ) * self.odds_ratio_miss
+					if not((x_ind, y_ind) in marked):
+						self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self.p_occ) * self.odds_ratio_miss
 						marked.add((x_ind, y_ind))
-				if self.is_in_map(data_x, data_y):
+				if not(self.is_in_map(data_x, data_y)):
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
 		
 		self.seq += 1
-		if self.seq % 5 == 0:
+		if self.seq % 10 == 0:
 			map = OccupancyGrid() #this is a nav msg class
 			map.header.seq = self.seq
+			self.seq+= 1
 			map.header.stamp = msg.header.stamp
 			map.header.frame_id = "map"
 			map.info.origin.position.x = self.origin[0]
@@ -218,6 +220,7 @@ class RunMapping:
 		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255, 0, 0))
 		cv2.imshow("map", cv2.resize(image,(500,500)))
 		cv2.waitKey(20) #effectively a delay
+
 
 	def run(self):
 		r = rospy.Rate(10)
