@@ -5,7 +5,7 @@ October 3, 2014 - Adjustments were made to Paul's particle filter code
 to gather all the statements which interact with gazebo, rviz, or 
 various rostopics.  The rest is a pseudo code structure.
 
-October 4, 2014 - C+V: Finished formatting base code form Paul's inclass example (with some minor adjustments and renamings, and from pf_code that seemed useful, especially the transforms). Tested code - results was:
+October 4, 2014 - C+V: Finished formatting base code form Paul's inclass example (with some minor adjustments and renamings, and from pf_code that seemed useful, especially the transforms). Tested code - results was: it worked!
 
 """
 #interfaces with ROS and Python
