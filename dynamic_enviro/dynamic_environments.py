@@ -1,38 +1,37 @@
 #!/usr/bin/env python
 
 """
-As of September 29, 2014 Claire, Victoria and Amanda have done pseudo code for 24
-distinct TODOs split as following:
+October 3, 2014 - Adjustments were made to Paul's particle filter code 
+to gather all the statements which interact with gazebo, rviz, or 
+various rostopics.  The rest is a pseudo code structure.
 
-1-3 Amanda
-4-6 Claire
-7-10 Victoria
+October 4, 2014 - C+V: 
 
 """
-
+#interfaces with ROS and Python
 import rospy
-
+#Getting topics from ROS
 from std_msgs.msg import Header, String
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
 from nav_msgs.srv import GetMap
-
+#Broadcaster/reciever information
 import tf
 from tf import TransformListener
 from tf import TransformBroadcaster
 from tf.transformations import euler_from_quaternion, rotation_matrix, quaternion_from_matrix
-from random import gauss
-
+#Helper imports
 import math
 import time
-
+import cv2 #openCV used to make window for publishing data
 import numpy as np
 from numpy.random import random_sample
 from sklearn.neighbors import NearestNeighbors
 
 class TransformHelpers:
-	""" Some convenience functions for translating between various representions of a robot pose.
-		TODO: nothing... you should not have to modify these """
+	""" Helper functions for making transformations of data from the RunMapping
+	world to the script and back.  Will only be useful for us if we add an autonomy
+	function to the robot """
 
 	@staticmethod
 	def convert_translation_rotation_to_pose(translation, rotation):
@@ -64,36 +63,9 @@ class TransformHelpers:
 		angles = euler_from_quaternion(orientation_tuple)
 		return (pose.position.x, pose.position.y, angles[2])
 
-class Particle:
-	""" Represents a hypothesis (particle) of the robot's pose consisting of x,y and theta (yaw)
-		Attributes:
-			x: the x-coordinate of the hypothesis relative to the map frame
-			y: the y-coordinate of the hypothesis relative ot the map frame
-			theta: the yaw of the hypothesis relative to the map frame
-			w: the particle weight (the class does not ensure that particle weights are normalized
-	"""
-
-	def __init__(self,x=0.0,y=0.0,theta=0.0,w=1.0):
-		""" Construct a new Particle
-			x: the x-coordinate of the hypothesis relative to the map frame
-			y: the y-coordinate of the hypothesis relative ot the map frame
-			theta: the yaw of the hypothesis relative to the map frame
-			w: the particle weight (the class does not ensure that particle weights are normalized """ 
-		self.w = w
-		self.theta = theta
-		self.x = x
-		self.y = y
-
-	def as_pose(self):
-		""" A helper function to convert a particle to a geometry_msgs/Pose message """
-		orientation_tuple = tf.transformations.quaternion_from_euler(0,0,self.theta)
-		return Pose(position=Point(x=self.x,y=self.y,z=0), orientation=Quaternion(x=orientation_tuple[0], y=orientation_tuple[1], z=orientation_tuple[2], w=orientation_tuple[3]))
-
-	# TODO: define additional helper functions if needed
-
 
 """ Difficulty Level 2 """
-class OccupancyField:
+class RunMapping:
 	""" Stores an occupancy field for an input map.  An occupancy field returns the distance to the closest
 		obstacle for any coordinate in the map
 		Attributes:
@@ -102,87 +74,79 @@ class OccupancyField:
 	"""
 
 	def __init__(self, map):
-		self.map = map		# save this for later
-		# TODO1: implement this (level 2)
+		rospy.init_node("grid")	
+		#create map properties, helps to make ratio calcs
+		cv2.namedWindow("map")
+		self.origin = [-10,-10]
+		self.seq = 0
+		self.resolution = 0.1
+		self.n = 200
+		#Giving initial hypotheses to the system
+		self.p_occ = 0.5 #50-50 chance of being occupied
+		self.odds_ratio_hit = 3.0 #this is arbitrary, can re-assign
+		self.odds_ratio_miss = 0.2 #this is arbitrary, can reassign
+		#calculates odds based upon hit to miss, equal odds to all grid squares
+		self.odds_ratios = (self.p_occ)/(1-self.p_occ)*np.ones((self.n, self.n))
+		
+		#write laser pubs and subs
+		rospy.Subscriber("scan", LaserScan, self.scan_received, queue_size=1)
+		rospy.Publisher("map", OccupancyGrid)
 
-		""" We need to find out how many coordinates there are, assign them coordinates, assign occupancy, 
-		figure out where the closest things are to each coordinate
+		#note - in case robot autonomy is added back in
+		tf_listener = TransformListener()
+		tf_broadcaster = TransformBroadcaster()	
 
-		Need to define map with the coordinates and obstacles
-
-		Need to define occ (the closest obstacle to each coordinate)
-			This is tricky for dynamic environments!  
-		"""
-		#create empty array of coordinates of grid cells in map (numpy array would be good)
-		#create array of coordinates of occuppied grid cells 
-		#determine which things are objects(?)
-
-		X = np.zeros((self.map.info.width*self.map.info.height,2))
-
-			# while we're at it let's count the number of occupied cells
-			total_occupied = 0
-			curr = 0
-			for i in range(self.map.info.width):
-				for j in range(self.map.info.height):
-					# occupancy grids are stored in row major order, if you go through this right, you might be able to use curr
-					ind = i + j*self.map.info.width
-					if self.map.data[ind] > 0:
-						total_occupied += 1
-					X[curr,0] = float(i)
-					X[curr,1] = float(j)
-					curr += 1
-
-			# build up a numpy array of the coordinates of each occupied grid cell in the map
-			O = np.zeros((total_occupied,2))
-			curr = 0
-			for i in range(self.map.info.width):
-				for j in range(self.map.info.height):
-					# occupancy grids are stored in row major order, if you go through this right, you might be able to use curr
-					ind = i + j*self.map.info.width
-					if self.map.data[ind] > 0:
-						O[curr,0] = float(i)
-						O[curr,1] = float(j)
-						curr += 1
-
-			# use super fast scikit learn nearest neighbor algorithm
-			nbrs = NearestNeighbors(n_neighbors=1,algorithm="ball_tree").fit(O)
-			distances, indices = nbrs.kneighbors(X)
-
-			self.closest_occ = {}
-			curr = 0
-			for i in range(self.map.info.width):
-				for j in range(self.map.info.height):
-					ind = i + j*self.map.info.width
-					self.closest_occ[ind] = distances[curr]*self.map.info.resolution
-					curr += 1
+		# use super fast scikit learn nearest neighbor algorithm
+		# nbrs = NearestNeighbors(n_neighbors=1,algorithm="ball_tree").fit(O)
+		# distances, indices = nbrs.kneighbors(X)
+		# self.closest_occ = {}
+		# curr = 0
+		# for i in range(self.map.info.width):
+		# 	for j in range(self.map.info.height):
+		# 		ind = i + j*self.map.info.width
+		# 		self.closest_occ[ind] = distances[curr]*self.map.info.resolution
+		# 		curr += 1
 		
 
 	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
 		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
 			is out of the map boundaries, nan will be returned. """
-		# TODO2: implement this 
+			pass
+			# x_coord = int((x - self.map.info.origin.position.x)/self.map.info.resolution)
+			# y_coord = int((y - self.map.info.origin.position.y)/self.map.info.resolution)
+			# # check if we are in bounds
+			# if x_coord > self.map.info.width or x_coord < 0:
+			# 	return float('nan')
+			# if y_coord > self.map.info.height or y_coord < 0:
+			# 	return float('nan')
+			# ind = x_coord + y_coord*self.map.info.width
+			# if ind >= self.map.info.width*self.map.info.height or ind < 0:
+			# 	return float('nan')
+			# return self.closest_occ[ind]
 
-		#find closest x and y (use x and y of where the robot pose is, and the particle postions found in above function)
-		#check if they are outside the map bounds (check if greater than map width/height or less than 0)
-		#put these x and y values together and call them the closest obstacle
+	def is_in_map(self, x, y):
+		"Returns boolean of whether or not a point is within map boundaries"
+		#return if x is less than the origin, or larger than the map, ditto for y
+		return not(x < self.origin[0] or x > self.origin[0] + self.n*self.resolution or y<self.origin[1] or y>self.origin[1] + self.n*self.resolution)
 
-		x_coord = int((x - self.map.info.origin.position.x)/self.map.info.resolution)
-			y_coord = int((y - self.map.info.origin.position.y)/self.map.info.resolution)
+	def scan_received(self, msg):
+			""" Returns an occupancy grid to publish data to map"""	
 
-			# check if we are in bounds
-			if x_coord > self.map.info.width or x_coord < 0:
-				return float('nan')
-			if y_coord > self.map.info.height or y_coord < 0:
-				return float('nan')
+		#make a pose stamp that relates to the odom of the robot
+		p = PoseStamped(header=Header(stamp=msg.header.stamp,frame_id="base_link"), pose=Pose())
+		self.odom_pose = self.tf_listener.transformPose("odom", p)
+		# store the the odometry pose in a more convenient format (x,y,theta)
+		self.odom_pose = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
 
-			ind = x_coord + y_coord*self.map.info.width
-			if ind >= self.map.info.width*self.map.info.height or ind < 0:
-				return float('nan')
-			return self.closest_occ[ind]
+		#get laser data
+		#get position
+		#get step along the way (so which time in terms of bayesian)
+		#make sure data is in the map, you are in the map
+		#update odds ratios
+		#publish new ratios to the occupancy field
 
-		""" We need to define where we are, make sure we're actually in the map
 
-		"""
+
 
 class ParticleFilter:
 	""" The class that represents a Particle Filter ROS Node
@@ -239,11 +203,7 @@ class ParticleFilter:
 		self.particle_pub = rospy.Publisher("particlecloud", PoseArray)
 
 		# laser_subscriber listens for data from the lidar
-		self.laser_subscriber = rospy.Subscriber(self.scan_topic, LaserScan, self.scan_received)
-
-		# enable listening for and broadcasting coordinate transforms
-		self.tf_listener = TransformListener()
-		self.tf_broadcaster = TransformBroadcaster()
+		
 
 		self.particle_cloud = []
 
@@ -271,36 +231,6 @@ class ParticleFilter:
 		# first make sure that the particle weights are normalized
 		self.normalize_particles()
 
-	def update_particle_pos(self):
-		""" Update the estimate of the particle position based on the velocity vector created
-		"""
-		# TODO5: assign the lastest particle position into self.SOMETHING WE NEED TO FIGURE OUT as a geometry_msgs.Pose object
-
-		"""We need to update particle pose"""
-		# first make sure that the particle weights are normalized
-		self.normalize_particles()
-		########PSUEDO CODE############
-		#math for x and y components
-		#add x and y components of the velocity vector to appropriate position of particles
-		#reset particle positions with new values
-
-	def update_particles_with_odom(self, msg):
-		""" Implement a simple version of this (Level 1) or a more complex one (Level 2) """
-		new_odom_xy_theta = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
-		# compute the change in x,y,theta since our last update
-		if self.current_odom_xy_theta:
-			old_odom_xy_theta = self.current_odom_xy_theta
-			delta = (new_odom_xy_theta[0] - self.current_odom_xy_theta[0], new_odom_xy_theta[1] - self.current_odom_xy_theta[1], new_odom_xy_theta[2] - self.current_odom_xy_theta[2])
-			self.current_odom_xy_theta = new_odom_xy_theta
-		else:
-			self.current_odom_xy_theta = new_odom_xy_theta
-			return
-
-		# TODO: modify particles using delta
-		"""DON'T NEED THIS"""
-
-		# For added difficulty: Implement sample_motion_odometry (Prob Rob p 136)
-
 	def map_calc_range(self,x,y,theta):
 		""" Difficulty Level 3: implement a ray tracing likelihood model... Let me know if you are interested """
 		# TODO6: nothing unless you want to try this alternate likelihood model
@@ -308,39 +238,7 @@ class ParticleFilter:
 
 		pass
 
-	def resample_particles(self):
-		""" Resample the particles according to the new particle weights """
-		# make sure the distribution is normalized
-		self.normalize_particles()
-		# TODO7: fill out the rest of the implementation
-		#Update bayes, calls update_particles_with_laser
-		########PSUEDO CODE############
-		#find the probability of being in the spot, given the data
-			#P(B|A) * P(A))/P(B)
-		#find the probability of not being in the spot, given data
-			#P(B|A) * P(A))/P(B)
-		#find the ratio of the probabilities to give the true probability
-		#return the liklihood of being in that spot given the particles
 
-
-	def update_particles_with_laser(self, msg):
-		""" Updates the particle weights in response to the scan contained in the msg """
-		# TODO8: implement this
-		"""Update our data  use laser_subscriber msg, similar to in simple behaviors"""
-		##########PSUEDOCODE###################
-		#for i in range(self.n_particles):
-			#self.particle_cloud.append(msg.ranges[i])
-
-		#Potentially process for certain distances, like:
-		#for i in range(self.n_particles):
-			#if msg.ranges[i] < max_val:
-				#new static prob given that it exists is 1, update bayes
-				#new dynamic prob given that it exists is 0, update bayes
-			#else:
-				#new static prob given that it doesn't exist is 0, update bayes
-				#new dynamic prob given that it doesn't exist is 1, update bayes
-			#publish to self.static, self.dynamic
-		pass
 
 	@staticmethod
 	def angle_normalize(z):
@@ -384,109 +282,7 @@ class ParticleFilter:
 		self.initialize_particle_cloud(xy_theta)
 		self.fix_map_to_odom_transform(msg)
 
-	def initialize_particle_cloud(self, xy_theta=None):
-		""" Initialize the particle cloud.
-			Arguments
-			xy_theta: a triple consisting of the mean x, y, and theta (yaw) to initialize the
-					  particle cloud around.  If this input is ommitted, the odometry will be used """
-		if xy_theta == None:
-			xy_theta = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
-		self.particle_cloud = []
-		# TODO9 create particles
-		"""Call particle class"""
-		###################PSUDEOCODE####################
-		#explode the triple of xy_theta
-		#assign initial weights as 0.5
-		# TODO create particles
-		xcount = -0.180
-		ycount = 0.180
-		for i in range(self.n_particles):
-			self.particle_cloud.append(Particle(xy_theta[0]+xcount, xy_theta[1]+ycount, xy_theta[2]))
-			self.particle_cloud.append(Particle(-(xy_theta[0]-xcount), -(xy_theta[1]+ycount), xy_theta[2]))
-			xcount += 0.001
-			ycount -= 0.001
-			#creates a mass of particles centered at 0,0 that point in every direction
-		# import numpy as np
 
-		# #precomputed (depends on the dimensions of your grid)
-		# x = np.arange(50) # x values
-		# y = np.arange(50) # y values
-		# xx, yy = np.meshgrid(x, y) # combine both vectors
-
-		# # for this particular circle
-		# cx, cy, r = 10, 10, 5
-
-		# condition = (xx-cx)**2 + (yy-cy)**2 <= r**2
-		# points = xx[condition] + 1j*yy[condition] )
-
-		self.normalize_particles()
-		self.update_robot_pose()
-		self.update_particle_pos()
-
-	def normalize_particles(self):
-		""" Make sure the particle weights define a valid distribution (i.e. sum to 1.0) """
-		# TODO10: implement this
-		########PSUEDO CODE############
-		#
-		"""Gaussian"""
-
-	def publish_particles(self, msg):
-		particles_conv = []
-		for p in self.particle_cloud:
-			particles_conv.append(p.as_pose())
-		# actually send the message so that we can view it in rviz
-		self.particle_pub.publish(PoseArray(header=Header(stamp=rospy.Time.now(),frame_id=self.map_frame),poses=particles_conv))
-
-	def scan_received(self, msg):
-		""" This is the default logic for what to do when processing scan data.  Feel free to modify this, however,
-			I hope it will provide a good guide.  The input msg is an object of type sensor_msgs/LaserScan """
-		if not(self.initialized):
-			# wait for initialization to complete
-			#spin ros?
-			return
-
-		if not(self.tf_listener.canTransform(self.base_frame,msg.header.frame_id,msg.header.stamp)):
-			# need to know how to transform the laser to the base frame
-			# this will be given by either Gazebo or neato_node
-			#read from Gazebo or neato_node
-			return
-
-		if not(self.tf_listener.canTransform(self.base_frame,self.odom_frame,msg.header.stamp)):
-			# need to know how to transform between base and odometric frames
-			# this will eventually be published by either Gazebo or neato_node
-			#read from Gavebo or neat_node
-			return
-		"""TODO11"""	
-
-		# calculate pose of laser relative ot the robot base
-		p = PoseStamped(header=Header(stamp=rospy.Time(0),frame_id=msg.header.frame_id))
-		self.laser_pose = self.tf_listener.transformPose(self.base_frame,p)
-
-		# find out where the robot thinks it is based on its odometry
-		p = PoseStamped(header=Header(stamp=msg.header.stamp,frame_id=self.base_frame), pose=Pose())
-		self.odom_pose = self.tf_listener.transformPose(self.odom_frame, p)
-		# store the the odometry pose in a more convenient format (x,y,theta)
-		new_odom_xy_theta = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
-
-		if not(self.particle_cloud):
-			# now that we have all of the necessary transforms we can update the particle cloud
-			self.initialize_particle_cloud()
-			# cache the last odometric pose so we can only update our particle filter if we move more than self.d_thresh or self.a_thresh
-			self.current_odom_xy_theta = new_odom_xy_theta
-			# update our map to odom transform now that the particles are initialized
-			self.fix_map_to_odom_transform(msg)
-		elif (math.fabs(new_odom_xy_theta[0] - self.current_odom_xy_theta[0]) > self.d_thresh or
-			  math.fabs(new_odom_xy_theta[1] - self.current_odom_xy_theta[1]) > self.d_thresh or
-			  math.fabs(new_odom_xy_theta[2] - self.current_odom_xy_theta[2]) > self.a_thresh):
-			# we have moved far enough to do an update!
-			self.update_particles_with_odom(msg)	# update based on odometry
-			self.update_particles_with_laser(msg)	# update based on laser scan
-			self.resample_particles()				# resample particles to focus on areas of high density
-			self.update_robot_pose()				# update robot's pose
-			self.update_particle_pos()
-			self.fix_map_to_odom_transform(msg)		# update map to odom transform now that we have new particles
-		# publish particles (so things like rviz can see them)
-		self.publish_particles(msg)
 
 	def fix_map_to_odom_transform(self, msg):
 		""" Super tricky code to properly update map to odom transform... do not modify this... Difficulty level infinity. """
@@ -503,7 +299,7 @@ class ParticleFilter:
 		self.tf_broadcaster.sendTransform(self.translation, self.rotation, rospy.get_rostime(), self.odom_frame, self.map_frame)
 
 if __name__ == '__main__':
-	n = ParticleFilter()
+	n = RunMapping()
 	r = rospy.Rate(5)
 
 	while not(rospy.is_shutdown()):
