@@ -7,6 +7,10 @@ various rostopics.  The rest is a pseudo code structure.
 
 October 4, 2014 - C+V: Finished formatting base code form Paul's inclass example (with some minor adjustments and renamings, and from pf_code that seemed useful, especially the transforms). Tested code - results was: it worked!
 
+October 6, 2014 - C+A: Reviewed code so far, attempted to implement on computers.  Serious issues with launching it on their computers.
+
+October 7, 2014 - All: In class we got everyone's workspace up and running.  Then we wrote pseudocode to implement at a meeting to be held later today.  At that next meeting we...
+
 """
 #interfaces with ROS and Python
 import rospy
@@ -78,17 +82,23 @@ class RunMapping:
 		cv2.namedWindow("map")
 		rospy.init_node("run_mapping")	
 		#create map properties, helps to make ratio calcs
-		
 		self.origin = [-10,-10]
 		self.seq = 0
 		self.resolution = 0.1
 		self.n = 200
+
+
 		#Giving initial hypotheses to the system
 		self.p_occ = 0.5 #50-50 chance of being occupied
 		self.odds_ratio_hit = 3.0 #this is arbitrary, can re-assign
 		self.odds_ratio_miss = 0.2 #this is arbitrary, can reassign
+		#TODO: Evaluate these - what do we need to change in order to make this more friendly to our version?  Potential changes:
+		#Whenever there is an adjustment to self.odds_ratio_miss, update an odds ratio that implies dynamicness
+
+
 		#calculates odds based upon hit to miss, equal odds to all grid squares
 		self.odds_ratios = (self.p_occ)/(1-self.p_occ)*np.ones((self.n, self.n))
+		#TODO: Make sure that this is still an accurate representation of how probabilities work in our system.  Make appropriate additions/adjustments for the dynamic obstacle piece
 		
 		#write laser pubs and subs
 		rospy.Subscriber("scan", LaserScan, self.scan_received, queue_size=1)
@@ -96,17 +106,6 @@ class RunMapping:
 
 		#note - in case robot autonomy is added back in
 		self.tf_listener = TransformListener()	
-
-		# use super fast scikit learn nearest neighbor algorithm
-		# nbrs = NearestNeighbors(n_neighbors=1,algorithm="ball_tree").fit(O)
-		# distances, indices = nbrs.kneighbors(X)
-		# self.closest_occ = {}
-		# curr = 0
-		# for i in range(self.map.info.width):
-		# 	for j in range(self.map.info.height):
-		# 		ind = i + j*self.map.info.width
-		# 		self.closest_occ[ind] = distances[curr]*self.map.info.resolution
-		# 		curr += 1
 	
 	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
 		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
@@ -172,17 +171,19 @@ class RunMapping:
 					if x_ind == datax_pixel and y_ind==datay_pixel:
 						break
 					if not((x_ind, y_ind) in marked):
+						#If point isn't marked, update the odds of missing and add to the map
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self.p_occ) * self.odds_ratio_miss
 						marked.add((x_ind, y_ind))
 				if not(self.is_in_map(data_x, data_y)):
+					#if it is not in the map, update the odds of hitting it
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
 		
 		self.seq += 1
 		if self.seq % 10 == 0:
 			map = OccupancyGrid() #this is a nav msg class
 			map.header.seq = self.seq
-			self.seq+= 1
 			map.header.stamp = msg.header.stamp
+			self.seq += 1
 			map.header.frame_id = "map"
 			map.info.origin.position.x = self.origin[0]
 			map.info.origin.position.y = self.origin[1]
@@ -195,19 +196,20 @@ class RunMapping:
 				for j in range(self.n):
 					idx = i+self.n*j #makes horizontal rows (i is x, j is y)
 					if self.odds_ratios[i,j] < 1/5.0:
-						map.data[idx] = 0 #makes the gray
+						map.data[idx] = 10 #makes the gray
 					elif self.odds_ratios[i,j] > 5.0:
 						map.data[idx] = 100 #makes the black walls
 					else:
 						map.data[idx] = -1 #makes unknown
 			self.pub.publish(map)
+			#TODO: Change display such that we're not just looking at the ratio, but mapping the dynamic archive and current readings
 
 		image = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
 				if self.odds_ratios[i,j] < 1/5.0:
-					image[i,j,:] = 1.0 #makes gray
+					image[i,j,:] = 2.0 #makes gray
 				elif self.odds_ratios[i,j] > 5.0:
 					image[i,j,:] = 0.0 #makes walls
 				else:
