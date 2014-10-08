@@ -196,7 +196,11 @@ class RunMapping:
 				for j in range(self.n):
 					idx = i+self.n*j #makes horizontal rows (i is x, j is y)
 					if self.odds_ratios[i,j] < 1/5.0:
-						map.data[idx] = 10 #makes the gray
+						map.data[idx] = 0 #makes the gray
+					elif self.odds_ratios[i,j] >= 1/5.0 <= 1.0:
+						map.data[idx] = 50
+					elif self.odds_ratios[i,j] > 1.0 <= 3.0:
+						map.data[idx] = 75
 					elif self.odds_ratios[i,j] > 5.0:
 						map.data[idx] = 100 #makes the black walls
 					else:
@@ -210,6 +214,10 @@ class RunMapping:
 			for j in range(image.shape[1]):
 				if self.odds_ratios[i,j] < 1/5.0:
 					image[i,j,:] = 2.0 #makes gray
+				elif self.odds_ratios[i,j] >= 1/5.0 <= 1.0:
+					image[i,j,:] = 10.0
+				elif self.odds_ratios[i,j] > 1.0 <= 3.0:
+					image[i,j,:] = 5.0
 				elif self.odds_ratios[i,j] > 5.0:
 					image[i,j,:] = 0.0 #makes walls
 				else:
