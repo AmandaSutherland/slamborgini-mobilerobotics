@@ -9,7 +9,7 @@ October 4, 2014 - C+V: Finished formatting base code form Paul's inclass example
 
 October 6, 2014 - C+A: Reviewed code so far, attempted to implement on computers.  Serious issues with launching it on their computers.
 
-October 7, 2014 - All: In class we got everyone's workspace up and running.  Then we wrote pseudocode to implement at a meeting to be held later today.  At that next meeting we discussed the use of Bayes.  We decided to keep the current bayes set-up, and played with the spectrum.  We have a plan on logging data into a database once it is read, and as it fades the new color of the database log will come through.
+October 7, 2014 - All: In class we got everyone's workspace up and running.  Then we wrote pseudocode to implement at a meeting to be held later today.  At that next meeting we discussed the use of Bayes.  We decided to keep the current bayes set-up, and played with the spectrum.  We have a plan on logging data into a database once it is read, and as it fades the new color of the database log will come through.  After this, we will work on robot localization, by setting up a simple particle filter (maybe) and relate it to our generated map.
 
 """
 #interfaces with ROS and Python
