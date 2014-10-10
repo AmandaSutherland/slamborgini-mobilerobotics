@@ -93,7 +93,7 @@ class RunMapping:
 		#Giving initial hypotheses to the system
 		self.p_occ = 0.5 #50-50 chance of being occupied
 		self.odds_ratio_hit = 3.0 #this is arbitrary, can re-assign
-		self.odds_ratio_miss = 0.2 #this is arbitrary, can reassign
+		self.odds_ratio_miss = 0.1 #this is arbitrary, can reassign
 		#TODO: Evaluate these - what do we need to change in order to make this more friendly to our version?  Potential changes:
 		#Whenever there is an adjustment to self.odds_ratio_miss, update an odds ratio that implies dynamicness
 
@@ -175,11 +175,12 @@ class RunMapping:
 					if not((x_ind, y_ind) in marked):
 						#If point isn't marked, update the odds of missing and add to the map
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self.p_occ) * self.odds_ratio_miss
+						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
 						marked.add((x_ind, y_ind))
 				if not(self.is_in_map(data_x, data_y)):
 					#if it is not in the map, update the odds of hitting it
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
-		
+					self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self.p_occ) * self.odds_ratio_miss
 		self.seq += 1
 		if self.seq % 10 == 0:
 			map = OccupancyGrid() #this is a nav msg class
@@ -198,10 +199,8 @@ class RunMapping:
 					idx = i+self.n*j #makes horizontal rows (i is x, j is y)
 					if self.odds_ratios[i,j] < 1/5.0:
 						map.data[idx] = 0 #makes the gray
-					elif self.odds_ratios[i,j] >= 1/5.0 <= 1.0:
-						map.data[idx] = 100
-					elif self.odds_ratios[i,j] > 1.0 <= 3.0:
-						map.data[idx] = 100
+					elif self.odds_ratios[i,j] >= 1/5.0 < 0.5:
+						map.data[idx] = 50
 					elif self.odds_ratios[i,j] > 5.0:
 						map.data[idx] = 100 #makes the black walls
 					else:
@@ -217,7 +216,7 @@ class RunMapping:
 					image[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/5.0 and self.odds_ratios[i,j] <0.5:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 5.0:
+				elif self.odds_ratios[i,j] > 8.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
 					image[i,j,:] = 0.5 #not read yet	
