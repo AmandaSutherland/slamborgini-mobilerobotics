@@ -91,7 +91,7 @@ class RunMapping:
 
 
 		#Giving initial hypotheses to the system
-		self.p_occ = 0.5 #50-50 chance of being occupied
+		self.p_occ = 0.5*np.ones((self.n, self.n)) #50-50 chance of being occupied
 		self.odds_ratio_hit = 3.0 #this is arbitrary, can re-assign
 		self.odds_ratio_miss = 0.1 #this is arbitrary, can reassign
 		#TODO: Evaluate these - what do we need to change in order to make this more friendly to our version?  Potential changes:
@@ -174,13 +174,21 @@ class RunMapping:
 						break
 					if not((x_ind, y_ind) in marked):
 						#If point isn't marked, update the odds of missing and add to the map
-						self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self.p_occ) * self.odds_ratio_miss
-						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
+						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_hit
+						self.p_occ[x_ind, y_ind] *= self.odds_ratio_hit
+						marked.add((x_ind, y_ind))
+					else:
+						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_miss
+						self.p_occ[x_ind, y_ind] *= self.odds_ratio_miss
 						marked.add((x_ind, y_ind))
 				if not(self.is_in_map(data_x, data_y)):
 					#if it is not in the map, update the odds of hitting it
-					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ/(1-self.p_occ) * self.odds_ratio_hit
-					self.odds_ratios[x_ind, y_ind] *= self.p_occ / (1-self.p_occ) * self.odds_ratio_miss
+					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
+					self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratio_hit 
+				else:
+					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_miss
+					self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratio_miss
+
 		self.seq += 1
 		if self.seq % 10 == 0:
 			map = OccupancyGrid() #this is a nav msg class
@@ -212,14 +220,14 @@ class RunMapping:
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
-				if self.odds_ratios[i,j] < 1/5.0:
+				if self.odds_ratios[i,j] < 1/10.0:
 					image[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/5.0 and self.odds_ratios[i,j] <0.5:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 8.0:
+				elif self.odds_ratios[i,j] > 5.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
-					image[i,j,:] = 0.5 #not read yet	
+					image[i,j,:] = 0.5 #not read 	
 
 		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
 		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
