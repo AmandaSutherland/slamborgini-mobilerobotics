@@ -11,7 +11,7 @@ October 6, 2014 - C+A: Reviewed code so far, attempted to implement on computers
 
 October 7, 2014 - All: In class we got everyone's workspace up and running.  Then we wrote pseudocode to implement at a meeting to be held later today.  At that next meeting we discussed the use of Bayes.  We decided to keep the current bayes set-up, and played with the spectrum.  We have a plan on logging data into a database once it is read, and as it fades the new color of the database log will come through.  After this, we will work on robot localization, by setting up a simple particle filter (maybe) and relate it to our generated map.
 
-October 10, 2014 - All: In class
+October 10, 2014 - All: In class Amanda worked on getting dynamic obstacles develped in Gazebo.  Claire and Victoria worked on adjusting the map display, and identifying the spaces in which Bayesian updates should be made and developed.  In the evening...
 
 """
 #interfaces with ROS and Python
