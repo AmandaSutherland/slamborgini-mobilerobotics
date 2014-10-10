@@ -11,6 +11,8 @@ October 6, 2014 - C+A: Reviewed code so far, attempted to implement on computers
 
 October 7, 2014 - All: In class we got everyone's workspace up and running.  Then we wrote pseudocode to implement at a meeting to be held later today.  At that next meeting we discussed the use of Bayes.  We decided to keep the current bayes set-up, and played with the spectrum.  We have a plan on logging data into a database once it is read, and as it fades the new color of the database log will come through.  After this, we will work on robot localization, by setting up a simple particle filter (maybe) and relate it to our generated map.
 
+October 10, 2014 - All: In class
+
 """
 #interfaces with ROS and Python
 import rospy
@@ -183,7 +185,6 @@ class RunMapping:
 			map = OccupancyGrid() #this is a nav msg class
 			map.header.seq = self.seq
 			map.header.stamp = msg.header.stamp
-			self.seq += 1
 			map.header.frame_id = "map"
 			map.info.origin.position.x = self.origin[0]
 			map.info.origin.position.y = self.origin[1]
@@ -198,9 +199,9 @@ class RunMapping:
 					if self.odds_ratios[i,j] < 1/5.0:
 						map.data[idx] = 0 #makes the gray
 					elif self.odds_ratios[i,j] >= 1/5.0 <= 1.0:
-						map.data[idx] = 50
+						map.data[idx] = 100
 					elif self.odds_ratios[i,j] > 1.0 <= 3.0:
-						map.data[idx] = 75
+						map.data[idx] = 100
 					elif self.odds_ratios[i,j] > 5.0:
 						map.data[idx] = 100 #makes the black walls
 					else:
@@ -213,15 +214,13 @@ class RunMapping:
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
 				if self.odds_ratios[i,j] < 1/5.0:
-					image[i,j,:] = 2.0 #makes gray
-				elif self.odds_ratios[i,j] >= 1/5.0 <= 1.0:
-					image[i,j,:] = 10.0
-				elif self.odds_ratios[i,j] > 1.0 <= 3.0:
-					image[i,j,:] = 5.0
+					image[i,j,:] = 1.0 #makes open space
+				elif self.odds_ratios[i,j] >= 1/5.0 and self.odds_ratios[i,j] <0.5:
+					image[i,j,:] = (0, 255, 0)
 				elif self.odds_ratios[i,j] > 5.0:
-					image[i,j,:] = 0.0 #makes walls
+					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
-					image[i,j,:] = 0.5 #none	
+					image[i,j,:] = 0.5 #not read yet	
 
 		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
 		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
