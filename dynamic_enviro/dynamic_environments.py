@@ -93,7 +93,7 @@ class RunMapping:
 		#Giving initial hypotheses to the system
 		self.p_occ = 0.5*np.ones((self.n, self.n)) #50-50 chance of being occupied
 		self.odds_ratio_hit = 3.0 #this is arbitrary, can re-assign
-		self.odds_ratio_miss = 0.1 #this is arbitrary, can reassign
+		self.odds_ratio_miss = 0.3 #this is arbitrary, can reassign
 		#TODO: Evaluate these - what do we need to change in order to make this more friendly to our version?  Potential changes:
 		#Whenever there is an adjustment to self.odds_ratio_miss, update an odds ratio that implies dynamicness
 
@@ -171,23 +171,21 @@ class RunMapping:
 					x_ind = int((curr_x - self.origin[0])/self.resolution)
 					y_ind = int((curr_y - self.origin[1])/self.resolution)
 					if x_ind == datax_pixel and y_ind==datay_pixel:
-						break
-					if not((x_ind, y_ind) in marked):
+						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
+					if not((x_ind, y_ind) in marked) and self.odds_ratios[x_ind, y_ind] >= 1/60.0:
 						#If point isn't marked, update the odds of missing and add to the map
-						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_hit
-						self.p_occ[x_ind, y_ind] *= self.odds_ratio_hit
-						marked.add((x_ind, y_ind))
-					else:
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_miss
-						self.p_occ[x_ind, y_ind] *= self.odds_ratio_miss
+						#self.p_occ[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] * self.odds_ratio_miss/self.odds_ratio_hit
 						marked.add((x_ind, y_ind))
+						print 'New Point'
 				if not(self.is_in_map(data_x, data_y)):
 					#if it is not in the map, update the odds of hitting it
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
-					self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratio_hit 
-				else:
-					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_miss
-					self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratio_miss
+					print 'Here'
+					#self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratios[datax_pixel, datay_pixel]*self.odds_ratio_hit
+				#else:
+				#	self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_miss
+				# 	self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratio_hit
 
 		self.seq += 1
 		if self.seq % 10 == 0:
@@ -208,8 +206,8 @@ class RunMapping:
 					if self.odds_ratios[i,j] < 1/5.0:
 						map.data[idx] = 0 #makes the gray
 					elif self.odds_ratios[i,j] >= 1/5.0 < 0.5:
-						map.data[idx] = 50
-					elif self.odds_ratios[i,j] > 5.0:
+						map.data[idx] = 25
+					elif self.odds_ratios[i,j] > 0.5:
 						map.data[idx] = 100 #makes the black walls
 					else:
 						map.data[idx] = -1 #makes unknown
@@ -220,11 +218,11 @@ class RunMapping:
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
-				if self.odds_ratios[i,j] < 1/10.0:
+				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
-				elif self.odds_ratios[i,j] >= 1/5.0 and self.odds_ratios[i,j] <0.5:
+				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 5.0:
+				elif self.odds_ratios[i,j] > 1.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
 					image[i,j,:] = 0.5 #not read 	
