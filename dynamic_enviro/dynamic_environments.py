@@ -82,6 +82,7 @@ class RunMapping:
 
 	def __init__(self):
 		cv2.namedWindow("map")
+		cv2.namedWindow("past_map")
 		rospy.init_node("run_mapping")	
 		#create map properties, helps to make ratio calcs
 		self.origin = [-10,-10]
@@ -89,6 +90,8 @@ class RunMapping:
 		self.resolution = 0.1
 		self.n = 200
 
+		self.dyn_obs=[]
+		self.counter=0
 
 		#Giving initial hypotheses to the system
 		self.p_occ = 0.5*np.ones((self.n, self.n)) #50-50 chance of being occupied
@@ -100,6 +103,8 @@ class RunMapping:
 
 		#calculates odds based upon hit to miss, equal odds to all grid squares
 		self.odds_ratios = (self.p_occ)/(1-self.p_occ)*np.ones((self.n, self.n))
+		#calculate initial past odds_ratio
+		self.past_odds_ratios = (self.p_occ)/(1-self.p_occ)*np.ones((self.n, self.n))
 		#TODO: Make sure that this is still an accurate representation of how probabilities work in our system.  Make appropriate additions/adjustments for the dynamic obstacle piece
 		
 		#write laser pubs and subs
@@ -171,17 +176,21 @@ class RunMapping:
 					x_ind = int((curr_x - self.origin[0])/self.resolution)
 					y_ind = int((curr_y - self.origin[1])/self.resolution)
 					if x_ind == datax_pixel and y_ind==datay_pixel:
+						#set odds ratio equal to past odds ratio
+						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
 						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
 					if not((x_ind, y_ind) in marked) and self.odds_ratios[x_ind, y_ind] >= 1/60.0:
 						#If point isn't marked, update the odds of missing and add to the map
+						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_miss
 						#self.p_occ[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] * self.odds_ratio_miss/self.odds_ratio_hit
 						marked.add((x_ind, y_ind))
-						print 'New Point'
+						#print 'New Point'
 				if not(self.is_in_map(data_x, data_y)):
 					#if it is not in the map, update the odds of hitting it
+					self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
-					print 'Here'
+					#print 'Here'
 					#self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratios[datax_pixel, datay_pixel]*self.odds_ratio_hit
 				#else:
 				#	self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_miss
@@ -193,6 +202,7 @@ class RunMapping:
 			map.header.seq = self.seq
 			map.header.stamp = msg.header.stamp
 			map.header.frame_id = "map"
+			map.header.frame_id = "past_map"
 			map.info.origin.position.x = self.origin[0]
 			map.info.origin.position.y = self.origin[1]
 			map.info.width = self.n
@@ -215,24 +225,41 @@ class RunMapping:
 			#TODO: Change display such that we're not just looking at the ratio, but mapping the dynamic archive and current readings
 
 		image = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
+		image2 = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
+
+		self.counter+=1
+
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
+				#print self.past_odds_ratios[i,j]
+				#print self.odds_ratios[i,j]
+				delta = self.odds_ratios[i,j]-self.past_odds_ratios[i,j]
 				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
 					image[i,j,:] = (0, 255, 0)
 				elif self.odds_ratios[i,j] > 1.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
+					if delta<0:
+						self.dyn_obs.append((i,j,self.counter))
 				else:
-					image[i,j,:] = 0.5 #not read 	
+					image[i,j,:] = 0.5 #not read
+
+		if len(self.dyn_obs)>0:
+			for point in self.dyn_obs:
+				print point[2]
+				if (self.counter-point[2])<=15:
+					image[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes
+					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
 
 		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
 		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
 
 		#draw it!
-		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255, 0, 0))
+		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255,0,0))
 		cv2.imshow("map", cv2.resize(image,(500,500)))
+		cv2.imshow("past_map", cv2.resize(image2,(500,500)))
 		cv2.waitKey(20) #effectively a delay
 
 
