@@ -245,7 +245,7 @@ class RunMapping:
 					image[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 0.75:
+				elif self.odds_ratios[i,j] > 0.9:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
 					image[i,j,:] = 0.5 #not read
