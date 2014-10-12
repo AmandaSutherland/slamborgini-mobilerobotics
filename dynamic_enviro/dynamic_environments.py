@@ -13,6 +13,7 @@ October 7, 2014 - All: In class we got everyone's workspace up and running.  The
 
 October 10, 2014 - All: In class Amanda worked on getting dynamic obstacles develped in Gazebo.  Claire and Victoria worked on adjusting the map display, and identifying the spaces in which Bayesian updates should be made and developed.  In the evening we played with the bayesian equations and attempted to make a quickly updating map.  This was achieved by updating the hits within the particle for loop, and limiting how 'unlikely' something was with being present.  By doing this, you can create the effect of a more dynamic environment, by assuming some arbitrarily small liklihood that SOMETHING will be in a location, no matter how many times you read it as blank.
 
+October 11, 2014 - C+A: Added dynamic obstacles and second map that has only them plotted on it. Plots on orginal map as well. Obstacles dissapear after 15 cycles.
 """
 #interfaces with ROS and Python
 import rospy
