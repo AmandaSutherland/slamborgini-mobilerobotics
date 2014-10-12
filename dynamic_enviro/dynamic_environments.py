@@ -92,6 +92,7 @@ class RunMapping:
 		self.n = 200
 
 		self.dyn_obs=[]
+		self.rapid_appear = set()
 		self.counter=0
 
 		#Giving initial hypotheses to the system
@@ -182,7 +183,7 @@ class RunMapping:
 						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
 					if not((x_ind, y_ind) in marked) and self.odds_ratios[x_ind, y_ind] >= 1/60.0:
 						#If point isn't marked, update the odds of missing and add to the map
-						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+						self.past_odds_ratios[x_ind, y_ind]=self.odds_ratios[x_ind, y_ind]
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_miss
 						#self.p_occ[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] * self.odds_ratio_miss/self.odds_ratio_hit
 						marked.add((x_ind, y_ind))
@@ -191,11 +192,7 @@ class RunMapping:
 					#if it is not in the map, update the odds of hitting it
 					self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
-					#print 'Here'
-					#self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratios[datax_pixel, datay_pixel]*self.odds_ratio_hit
-				#else:
-				#	self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_miss
-				# 	self.p_occ[datax_pixel, datay_pixel] *= self.odds_ratio_hit
+
 
 		self.seq += 1
 		if self.seq % 10 == 0:
@@ -236,20 +233,23 @@ class RunMapping:
 				#print self.past_odds_ratios[i,j]
 				#print self.odds_ratios[i,j]
 				delta = self.odds_ratios[i,j]-self.past_odds_ratios[i,j]
+				if (delta < -100.0) and (i,j) in self.rapid_appear:
+					self.dyn_obs.append((i,j,self.counter))
+
+				if delta > 0.0 and delta < 1.0 and (i,j) not in self.rapid_appear:
+					self.rapid_appear.add((i,j))
+
 				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
 					image[i,j,:] = (0, 255, 0)
 				elif self.odds_ratios[i,j] > 1.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
-					if delta<0:
-						self.dyn_obs.append((i,j,self.counter))
 				else:
 					image[i,j,:] = 0.5 #not read
 
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
-				print point[2]
 				if (self.counter-point[2])<=15:
 					image[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
