@@ -233,7 +233,7 @@ class RunMapping:
 				#print self.past_odds_ratios[i,j]
 				#print self.odds_ratios[i,j]
 				delta = self.odds_ratios[i,j]-self.past_odds_ratios[i,j]
-				if (delta < -100.0) and (i,j) in self.rapid_appear:
+				if (delta < -1000.0) and (i,j) in self.rapid_appear:
 					self.dyn_obs.append((i,j,self.counter))
 
 				if delta > 0.0 and delta < 1.0 and (i,j) not in self.rapid_appear:
@@ -241,16 +241,16 @@ class RunMapping:
 
 				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
-				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
+				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <2/5.0:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 1.0:
+				elif self.odds_ratios[i,j] > 0.6:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
 					image[i,j,:] = 0.5 #not read
 
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
-				if (self.counter-point[2])<=15:
+				if (self.counter-point[2])<=100:
 					image[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
 
