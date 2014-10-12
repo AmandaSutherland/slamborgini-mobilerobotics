@@ -1,0 +1,80 @@
+<robot name="test_robot">
+  <link name="link1" />
+  <link name="link2" />
+  <link name="link3" />
+
+ <!-- Constants for robot dimensions -->
+  <xacro:property name="PI" value="3.1415926535897931"/>
+  <xacro:property name="width" value="0.5" /> <!-- Square dimensions (widthxwidth) of box -->
+  <xacro:property name="width2" value="0.2" /> <!-- Square dimensions (widthxwidth) of bar -->
+  <xacro:property name="height1" value="1" /> <!-- Link 1 and 3-->
+  <xacro:property name="height2" value="1.5" /> <!-- Link 2 -->
+  <xacro:property name="axel_offset" value="0.05" /> <!-- Space btw top of beam and the each joint -->
+
+ <!-- Box 1 -->
+    <link name="link1">
+    <collision>
+      <origin xyz="0 0 ${height1/2}" rpy="0 0 0"/>
+      <geometry>
+  <box size="${width} ${width} ${height1}"/>
+      </geometry>
+    </collision>
+
+  <joint name="joint1" type="continuous">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="-0 1 0" rpy="0 0 1.57" />
+    <axis xyz="0 1 0" />
+  
+    <visual>
+      <origin xyz="0 0 ${height2/2 - axel_offset}" rpy="0 0 0"/>
+      <geometry>
+  <box size="${width} ${width} ${height2}"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+  </joint>
+
+ <!-- Joining Bar -->
+    <link name="link2">
+    <collision>
+      <origin xyz="0 0 ${height1 + axel_offset}" rpy="0 0 0"/>
+      <geometry>
+  <box size="${width2} ${width2} ${height2}"/>
+      </geometry>
+    </collision>
+
+  <joint name="joint2" type="continuous">
+    <parent link="link2"/>
+    <child link="link3"/>
+    <origin xyz="1.5 1 0" rpy="0 0 1.57" />
+    <axis xyz="1.5 1 0" />
+  </joint>
+
+    <visual>
+      <origin xyz="0 {height2 + axel_offset} 0" rpy="0 0 0"/>
+      <geometry>
+  <box size="${width} ${width} ${height2}"/>
+      </geometry>
+    </visual>
+  </joint>
+
+ <!-- Box -->
+    <link name="link3">
+    <collision>
+      <origin xyz="1.5 0 0" rpy="0 0 0"/>
+      <geometry>
+  <box size="${width} ${width} ${height1}"/>
+      </geometry>
+    </collision>
+
+    <visual>
+      <origin xyz="1.5 0 0" rpy="0 0 0"/>
+      <geometry>
+  <box size="${width} ${width} ${height2}"/>
+      </geometry>
+    </visual>
+  </joint>
+
+
+</robot>
