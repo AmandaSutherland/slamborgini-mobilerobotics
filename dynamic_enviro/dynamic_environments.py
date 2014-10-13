@@ -14,8 +14,6 @@ October 7, 2014 - All: In class we got everyone's workspace up and running.  The
 October 10, 2014 - All: In class Amanda worked on getting dynamic obstacles develped in Gazebo.  Claire and Victoria worked on adjusting the map display, and identifying the spaces in which Bayesian updates should be made and developed.  In the evening we played with the bayesian equations and attempted to make a quickly updating map.  This was achieved by updating the hits within the particle for loop, and limiting how 'unlikely' something was with being present.  By doing this, you can create the effect of a more dynamic environment, by assuming some arbitrarily small liklihood that SOMETHING will be in a location, no matter how many times you read it as blank.
 
 October 11, 2014 - C+A: Added dynamic obstacles and second map that has only them plotted on it. Plots on orginal map as well. Obstacles dissapear after 15 cycles.
-
-October 12, 2014 - All: Readjusted mapping and pathing for dynamic obstacles.Also considered adding back odom.  We left the night with our final deliverable...
 """
 #interfaces with ROS and Python
 import rospy
@@ -43,28 +41,6 @@ class TransformHelpers:
 	world to the script and back.  Will only be useful for us if we add an autonomy
 	function to the robot """
 
-	@staticmethod
-	def convert_translation_rotation_to_pose(translation, rotation):
-		""" Convert from representation of a pose as translation and rotation (Quaternion) tuples to a geometry_msgs/Pose message """
-		return Pose(position=Point(x=translation[0],y=translation[1],z=translation[2]), orientation=Quaternion(x=rotation[0],y=rotation[1],z=rotation[2],w=rotation[3]))
-
-	@staticmethod
-	def convert_pose_inverse_transform(pose):
-		""" Helper method to invert a transform (this is built into the tf C++ classes, but ommitted from Python) """
-		translation = np.zeros((4,1))
-		translation[0] = -pose.position.x
-		translation[1] = -pose.position.y
-		translation[2] = -pose.position.z
-		translation[3] = 1.0
-
-		rotation = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
-		euler_angle = euler_from_quaternion(rotation)
-		rotation = np.transpose(rotation_matrix(euler_angle[2], [0,0,1]))		# the angle is a yaw
-		transformed_translation = rotation.dot(translation)
-
-		translation = (transformed_translation[0], transformed_translation[1], transformed_translation[2])
-		rotation = quaternion_from_matrix(rotation)
-		return (translation, rotation)
 
 	@staticmethod
 	def convert_pose_to_xy_and_theta(pose):
@@ -92,6 +68,8 @@ class RunMapping:
 		self.seq = 0
 		self.resolution = 0.1
 		self.n = 200
+
+		self.pose = []
 
 		self.dyn_obs=[]
 		self.rapid_appear = set()
@@ -229,6 +207,11 @@ class RunMapping:
 
 		self.counter+=1
 
+		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
+		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
+
+		self.pose.append((x_odom_index, y_odom_index))
+
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
@@ -243,12 +226,13 @@ class RunMapping:
 
 				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
-				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
+				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <4/5.0:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 5.0:
+				elif self.odds_ratios[i,j] > 1.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
-					image[i,j,:] = 0.5 #not read
+						image[i,j,:] = 0.5 #not read
+					
 
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
@@ -256,8 +240,9 @@ class RunMapping:
 					image[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
 
-		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
-		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
+		for point in self.pose:
+			image[point[0], point[1]] = (255, 0, 0)
+
 
 		#draw it!
 		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255,0,0))
