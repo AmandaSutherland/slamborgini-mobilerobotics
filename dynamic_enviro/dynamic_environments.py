@@ -127,6 +127,9 @@ class RunMapping:
 		self.odom_pose = self.tf_listener.transformPose("odom", p)
 		# convert the odom pose to the tuple (x,y,theta)
 		self.odom_pose = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
+
+		time_past = 0
+
 		for degree in range(360):
 			if msg.ranges[degree] > 0.0 and msg.ranges[degree] < 5.0:
 				#gets the position of the laser data points
@@ -157,20 +160,26 @@ class RunMapping:
 
 					x_ind = int((curr_x - self.origin[0])/self.resolution)
 					y_ind = int((curr_y - self.origin[1])/self.resolution)
-					if x_ind == datax_pixel and y_ind==datay_pixel:
+					if x_ind == datax_pixel and y_ind==datay_pixel and self.odds_ratios[datax_pixel, datay_pixel] >= 1/60.0:
 						#set odds ratio equal to past odds ratio
-						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+						if time_past % 5 == 0:
+							self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+							time_past += 1
 						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
 					if not((x_ind, y_ind) in marked) and self.odds_ratios[x_ind, y_ind] >= 1/60.0:
 						#If point isn't marked, update the odds of missing and add to the map
-						self.past_odds_ratios[x_ind, y_ind]=self.odds_ratios[x_ind, y_ind]
+						if time_past % 5 == 0:
+							self.past_odds_ratios[x_ind, y_ind]=self.odds_ratios[x_ind, y_ind]
+							time_past += 1
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_miss
 						#self.p_occ[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] * self.odds_ratio_miss/self.odds_ratio_hit
 						marked.add((x_ind, y_ind))
 						#print 'New Point'
-				if not(self.is_in_map(data_x, data_y)):
+				if not(self.is_in_map(data_x, data_y)) and self.odds_ratios[data_x, datay_pixel] >= 1/60.0:
 					#if it is not in the map, update the odds of hitting it
-					self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+					if time_past % 5 == 0:
+						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+						time_past += 1
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
 
 
@@ -217,27 +226,28 @@ class RunMapping:
 			for j in range(image.shape[1]):
 				#print self.past_odds_ratios[i,j]
 				#print self.odds_ratios[i,j]
-				delta = self.odds_ratios[i,j]-self.past_odds_ratios[i,j]
-				if (delta < -1000.0) and (i,j) in self.rapid_appear:
+				#the thing that just rapidly appeared, disappeared!
+				delta = (self.odds_ratios[i,j]-self.past_odds_ratios[i,j])
+				if (delta < 0.0) and (i,j) in self.rapid_appear:
 					self.dyn_obs.append((i,j,self.counter))
 
-				if delta > 0.0 and delta < 1.0 and (i,j) not in self.rapid_appear:
+				#whoa buddy, a thing just appeared
+				if delta > 100.0 and (i,j) not in self.rapid_appear:
 					self.rapid_appear.add((i,j))
 
 				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <4/5.0:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 1.0:
+				elif self.odds_ratios[i,j] > 50.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
-						image[i,j,:] = 0.5 #not read
+					image[i,j,:] = 0.5 #not read
 					
 
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
 				if (self.counter-point[2])<=100:
-					image[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
 
 		for point in self.pose:
