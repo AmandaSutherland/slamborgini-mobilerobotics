@@ -15,7 +15,7 @@ October 10, 2014 - All: In class Amanda worked on getting dynamic obstacles deve
 
 October 11, 2014 - C+A: Added dynamic obstacles and second map that has only them plotted on it. Plots on orginal map as well. Obstacles dissapear after 15 cycles.
 
-October 12, 2014 - All: Readjusted mapping and pathing for dynamic obstacles.Also considered adding back odom.  We left the night with our final deliverable...
+October 12, 2014 - All: We made the thingy work!  Mapping is still rough, can optimize tomorrow.  Adjusted things like top cap of odds, constants, adjusting pathing, etc.
 """
 #interfaces with ROS and Python
 import rospy
@@ -34,7 +34,10 @@ import math
 import time
 import cv2 #openCV used to make window for publishing data
 import numpy as np
-from numpy.random import random_sample
+from numpy.random import random_sample, rand
+from numpy import vstack, array
+from scipy.cluster.vq import kmeans, vq
+from pylab import plot, show
 from matplotlib.pyplot import imshow
 from sklearn.neighbors import NearestNeighbors
 
@@ -43,28 +46,6 @@ class TransformHelpers:
 	world to the script and back.  Will only be useful for us if we add an autonomy
 	function to the robot """
 
-	@staticmethod
-	def convert_translation_rotation_to_pose(translation, rotation):
-		""" Convert from representation of a pose as translation and rotation (Quaternion) tuples to a geometry_msgs/Pose message """
-		return Pose(position=Point(x=translation[0],y=translation[1],z=translation[2]), orientation=Quaternion(x=rotation[0],y=rotation[1],z=rotation[2],w=rotation[3]))
-
-	@staticmethod
-	def convert_pose_inverse_transform(pose):
-		""" Helper method to invert a transform (this is built into the tf C++ classes, but ommitted from Python) """
-		translation = np.zeros((4,1))
-		translation[0] = -pose.position.x
-		translation[1] = -pose.position.y
-		translation[2] = -pose.position.z
-		translation[3] = 1.0
-
-		rotation = (pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w)
-		euler_angle = euler_from_quaternion(rotation)
-		rotation = np.transpose(rotation_matrix(euler_angle[2], [0,0,1]))		# the angle is a yaw
-		transformed_translation = rotation.dot(translation)
-
-		translation = (transformed_translation[0], transformed_translation[1], transformed_translation[2])
-		rotation = quaternion_from_matrix(rotation)
-		return (translation, rotation)
 
 	@staticmethod
 	def convert_pose_to_xy_and_theta(pose):
@@ -92,6 +73,8 @@ class RunMapping:
 		self.seq = 0
 		self.resolution = 0.1
 		self.n = 200
+
+		self.pose = []
 
 		self.dyn_obs=[]
 		self.rapid_appear = set()
@@ -139,6 +122,8 @@ class RunMapping:
 		#return if x is less than the origin, or larger than the map, ditto for y
 		return (x < self.origin[0] or x > self.origin[0] + self.n*self.resolution or y<self.origin[1] or y>self.origin[1] + self.n*self.resolution)
 
+
+
 	def scan_received(self, msg):
 		""" Returns an occupancy grid to publish data to map"""	
 		if len(msg.ranges) != 360:
@@ -149,6 +134,9 @@ class RunMapping:
 		self.odom_pose = self.tf_listener.transformPose("odom", p)
 		# convert the odom pose to the tuple (x,y,theta)
 		self.odom_pose = TransformHelpers.convert_pose_to_xy_and_theta(self.odom_pose.pose)
+
+		time_past = 0
+
 		for degree in range(360):
 			if msg.ranges[degree] > 0.0 and msg.ranges[degree] < 5.0:
 				#gets the position of the laser data points
@@ -179,20 +167,26 @@ class RunMapping:
 
 					x_ind = int((curr_x - self.origin[0])/self.resolution)
 					y_ind = int((curr_y - self.origin[1])/self.resolution)
-					if x_ind == datax_pixel and y_ind==datay_pixel:
+					if x_ind == datax_pixel and y_ind==datay_pixel and self.odds_ratios[datax_pixel, datay_pixel] >= 1/60.0:
 						#set odds ratio equal to past odds ratio
-						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+						if time_past % 5 == 0:
+							self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+							time_past += 1
 						self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
 					if not((x_ind, y_ind) in marked) and self.odds_ratios[x_ind, y_ind] >= 1/60.0:
 						#If point isn't marked, update the odds of missing and add to the map
-						self.past_odds_ratios[x_ind, y_ind]=self.odds_ratios[x_ind, y_ind]
+						if time_past % 5 == 0:
+							self.past_odds_ratios[x_ind, y_ind]=self.odds_ratios[x_ind, y_ind]
+							time_past += 1
 						self.odds_ratios[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] / (1-self.p_occ[x_ind, y_ind]) * self.odds_ratio_miss
 						#self.p_occ[x_ind, y_ind] *= self.p_occ[x_ind, y_ind] * self.odds_ratio_miss/self.odds_ratio_hit
 						marked.add((x_ind, y_ind))
 						#print 'New Point'
-				if not(self.is_in_map(data_x, data_y)):
+				if not(self.is_in_map(data_x, data_y)) and self.odds_ratios[data_x, datay_pixel] >= 1/60.0:
 					#if it is not in the map, update the odds of hitting it
-					self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+					if time_past % 5 == 0:
+						self.past_odds_ratios[datax_pixel, datay_pixel]=self.odds_ratios[datax_pixel, datay_pixel]
+						time_past += 1
 					self.odds_ratios[datax_pixel, datay_pixel] *= self.p_occ[datax_pixel, datay_pixel]/(1-self.p_occ[datax_pixel, datay_pixel]) * self.odds_ratio_hit
 
 
@@ -229,35 +223,43 @@ class RunMapping:
 
 		self.counter+=1
 
+		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
+		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
+
+		self.pose.append((x_odom_index, y_odom_index))
+
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
 				#print self.past_odds_ratios[i,j]
 				#print self.odds_ratios[i,j]
-				delta = self.odds_ratios[i,j]-self.past_odds_ratios[i,j]
-				if (delta < -1000.0) and (i,j) in self.rapid_appear:
+				#the thing that just rapidly appeared, disappeared!
+				delta = (self.odds_ratios[i,j]-self.past_odds_ratios[i,j])
+				if (delta < 0.0) and (i,j) in self.rapid_appear:
 					self.dyn_obs.append((i,j,self.counter))
 
-				if delta > 0.0 and delta < 1.0 and (i,j) not in self.rapid_appear:
+				#whoa buddy, a thing just appeared
+				if delta > 1000.0 and (i,j) not in self.rapid_appear:
 					self.rapid_appear.add((i,j))
 
 				if self.odds_ratios[i,j] < 1/50.0:
 					image[i,j,:] = 1.0 #makes open space
-				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <3/5.0:
+				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <4/5.0:
 					image[i,j,:] = (0, 255, 0)
-				elif self.odds_ratios[i,j] > 0.9:
+				elif self.odds_ratios[i,j] > 50.0:
 					image[i,j,:] = (0, 0, 255) #makes walls
 				else:
 					image[i,j,:] = 0.5 #not read
+					
 
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
 				if (self.counter-point[2])<=100:
-					image[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
 
-		x_odom_index = int((self.odom_pose[0] - self.origin[0])/self.resolution)
-		y_odom_index = int((self.odom_pose[1] - self.origin[1])/self.resolution)
+		for point in self.pose:
+			image[point[0], point[1]] = (255, 0, 0)
+
 
 		#draw it!
 		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255,0,0))
