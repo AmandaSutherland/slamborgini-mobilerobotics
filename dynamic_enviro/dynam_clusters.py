@@ -16,8 +16,6 @@ October 10, 2014 - All: In class Amanda worked on getting dynamic obstacles deve
 October 11, 2014 - C+A: Added dynamic obstacles and second map that has only them plotted on it. Plots on orginal map as well. Obstacles dissapear after 15 cycles.
 
 October 12, 2014 - All: We made the thingy work!  Mapping is still rough, can optimize tomorrow.  Adjusted things like top cap of odds, constants, adjusting pathing, etc.
-
-October 13, 2014 - All: Finished it up!
 """
 #interfaces with ROS and Python
 import rospy
@@ -36,9 +34,15 @@ import math
 import time
 import cv2 #openCV used to make window for publishing data
 import numpy as np
-from numpy.random import random_sample
+from numpy.random import random_sample, rand
+from numpy import vstack, array
+import scipy as sp
+from scipy.cluster.vq import kmeans, vq
+from pylab import plot, show
 from matplotlib.pyplot import imshow
-from sklearn.neighbors import NearestNeighbors
+import matplotlib.pyplot as plt
+from sklearn.cluster import spectral_clustering
+from sklearn.feature_extraction import image
 
 class TransformHelpers:
 	""" Helper functions for making transformations of data from the RunMapping
@@ -53,6 +57,8 @@ class TransformHelpers:
 		angles = euler_from_quaternion(orientation_tuple)
 		return (pose.position.x, pose.position.y, angles[2])
 
+
+""" Difficulty Level 2 """
 class RunMapping:
 	""" Stores an occupancy field for an input map.  An occupancy field returns the distance to the closest
 		obstacle for any coordinate in the map
@@ -72,7 +78,6 @@ class RunMapping:
 		self.n = 200
 
 		self.pose = []
-		self.cluster_pose = []
 
 		self.dyn_obs=[]
 		self.rapid_appear = set()
@@ -99,11 +104,28 @@ class RunMapping:
 		#note - in case robot autonomy is added back in
 		self.tf_listener = TransformListener()	
 	
+	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
+		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
+			is out of the map boundaries, nan will be returned. """
+		pass
+			# x_coord = int((x - self.map.info.origin.position.x)/self.map.info.resolution)
+			# y_coord = int((y - self.map.info.origin.position.y)/self.map.info.resolution)
+			# # check if we are in bounds
+			# if x_coord > self.map.info.width or x_coord < 0:
+			# 	return float('nan')
+			# if y_coord > self.map.info.height or y_coord < 0:
+			# 	return float('nan')
+			# ind = x_coord + y_coord*self.map.info.width
+			# if ind >= self.map.info.width*self.map.info.height or ind < 0:
+			# 	return float('nan')
+			# return self.closest_occ[ind]
 
 	def is_in_map(self, x, y):
 		"Returns boolean of whether or not a point is within map boundaries"
 		#return if x is less than the origin, or larger than the map, ditto for y
 		return (x < self.origin[0] or x > self.origin[0] + self.n*self.resolution or y<self.origin[1] or y>self.origin[1] + self.n*self.resolution)
+
+
 
 	def scan_received(self, msg):
 		""" Returns an occupancy grid to publish data to map"""	
@@ -199,7 +221,7 @@ class RunMapping:
 			self.pub.publish(map)
 			#TODO: Change display such that we're not just looking at the ratio, but mapping the dynamic archive and current readings
 
-		image = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
+		image1 = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
 		image2 = np.zeros((self.odds_ratios.shape[0], self.odds_ratios.shape[1],3))
 
 		self.counter+=1
@@ -210,8 +232,10 @@ class RunMapping:
 		self.pose.append((x_odom_index, y_odom_index))
 
 		#.shape() comes from being related to the np class
-		for i in range(image.shape[0]):
-			for j in range(image.shape[1]):
+		for i in range(image1.shape[0]):
+			for j in range(image1.shape[1]):
+				#print self.past_odds_ratios[i,j]
+				#print self.odds_ratios[i,j]
 				#the thing that just rapidly appeared, disappeared!
 				delta = (self.odds_ratios[i,j]-self.past_odds_ratios[i,j])
 				if (delta < 0.0) and (i,j) in self.rapid_appear:
@@ -222,29 +246,55 @@ class RunMapping:
 					self.rapid_appear.add((i,j))
 
 				if self.odds_ratios[i,j] < 1/50.0:
-					image[i,j,:] = 1.0 #makes open space
+					image1[i,j,:] = 1.0 #makes open space
 				elif self.odds_ratios[i,j] >= 1/50.0 and self.odds_ratios[i,j] <4/5.0:
-					image[i,j,:] = (0, 255, 0)
+					image1[i,j,:] = (0, 255, 0)
 				elif self.odds_ratios[i,j] > 50.0:
-					image[i,j,:] = (0, 0, 255) #makes walls
+					image1[i,j,:] = (0, 0, 255) #makes walls
 				else:
-					image[i,j,:] = 0.5 #not read
+					image1[i,j,:] = 0.5 #not read
 					
 
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
-				if (self.counter-point[2])<=10:
+				if (self.counter-point[2])<=100:
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
+			graph = image.img_to_graph(image1)
+			beta = 5
+			eps = 1e-6
+			graph.data = np.exp(-beta*graph.data/image1.std())+eps
+
+			N_REGIONS = 5
+
+			for assign_labels in ('kmeans', 'discretize'):
+				t0 = time.time()
+	    		labels = spectral_clustering(graph, n_clusters=N_REGIONS, assign_labels=assign_labels,random_state=1)
+	    		t1 = time.time()
+	    		labels = labels.reshape(lena.shape)
+
+	    		plt.figure(figsize=(5, 5))
+	    		plt.imshow(image1,   cmap=plt.cm.gray)
+	    		for l in range(N_REGIONS):
+	        		plt.contour(labels == l, contours=1, colors=[plt.cm.spectral(l / float(N_REGIONS)), ])
+	    		plt.xticks(())
+	    		plt.yticks(())
+	    		plt.title('Spectral clustering: %s, %.2fs' % (assign_labels, (t1 - t0)))
+
+			plt.show()
+
 
 		for point in self.pose:
-			image[point[0], point[1]] = (255, 0, 0)
+			image1[point[0], point[1]] = (255, 0, 0)
+
 
 
 		#draw it!
-		cv2.circle(image,(y_odom_index, x_odom_index), 2,(255,0,0))
-		cv2.imshow("map", cv2.resize(image,(500,500)))
+		cv2.circle(image1,(y_odom_index, x_odom_index), 2,(255,0,0))
+		cv2.imshow("map", cv2.resize(image1,(500,500)))
 		cv2.imshow("past_map", cv2.resize(image2,(500,500)))
 		cv2.waitKey(20) #effectively a delay
+
+
 
 
 	def run(self):

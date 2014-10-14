@@ -16,8 +16,6 @@ October 10, 2014 - All: In class Amanda worked on getting dynamic obstacles deve
 October 11, 2014 - C+A: Added dynamic obstacles and second map that has only them plotted on it. Plots on orginal map as well. Obstacles dissapear after 15 cycles.
 
 October 12, 2014 - All: We made the thingy work!  Mapping is still rough, can optimize tomorrow.  Adjusted things like top cap of odds, constants, adjusting pathing, etc.
-
-October 13, 2014 - All: Finished it up!
 """
 #interfaces with ROS and Python
 import rospy
@@ -53,6 +51,8 @@ class TransformHelpers:
 		angles = euler_from_quaternion(orientation_tuple)
 		return (pose.position.x, pose.position.y, angles[2])
 
+
+""" Difficulty Level 2 """
 class RunMapping:
 	""" Stores an occupancy field for an input map.  An occupancy field returns the distance to the closest
 		obstacle for any coordinate in the map
@@ -72,9 +72,9 @@ class RunMapping:
 		self.n = 200
 
 		self.pose = []
-		self.cluster_pose = []
 
 		self.dyn_obs=[]
+		self.obstacle = []
 		self.rapid_appear = set()
 		self.counter=0
 
@@ -99,6 +99,21 @@ class RunMapping:
 		#note - in case robot autonomy is added back in
 		self.tf_listener = TransformListener()	
 	
+	def get_closest_obstacle_distance(self,x,y): #CHANGE TO get_closest_obstacle_path
+		""" Compute the closest obstacle to the specified (x,y) coordinate in the map.  If the (x,y) coordinate
+			is out of the map boundaries, nan will be returned. """
+		pass
+			# x_coord = int((x - self.map.info.origin.position.x)/self.map.info.resolution)
+			# y_coord = int((y - self.map.info.origin.position.y)/self.map.info.resolution)
+			# # check if we are in bounds
+			# if x_coord > self.map.info.width or x_coord < 0:
+			# 	return float('nan')
+			# if y_coord > self.map.info.height or y_coord < 0:
+			# 	return float('nan')
+			# ind = x_coord + y_coord*self.map.info.width
+			# if ind >= self.map.info.width*self.map.info.height or ind < 0:
+			# 	return float('nan')
+			# return self.closest_occ[ind]
 
 	def is_in_map(self, x, y):
 		"Returns boolean of whether or not a point is within map boundaries"
@@ -212,6 +227,8 @@ class RunMapping:
 		#.shape() comes from being related to the np class
 		for i in range(image.shape[0]):
 			for j in range(image.shape[1]):
+				#print self.past_odds_ratios[i,j]
+				#print self.odds_ratios[i,j]
 				#the thing that just rapidly appeared, disappeared!
 				delta = (self.odds_ratios[i,j]-self.past_odds_ratios[i,j])
 				if (delta < 0.0) and (i,j) in self.rapid_appear:
@@ -230,14 +247,24 @@ class RunMapping:
 				else:
 					image[i,j,:] = 0.5 #not read
 					
-
+		sumx = 0
+		sumy = 0
 		if len(self.dyn_obs)>0:
 			for point in self.dyn_obs:
+				sumx += point[0] 
+				sumy += point[1]
 				if (self.counter-point[2])<=10:
 					image2[point[0],point[1]] = (255,0,255) #makes old/dynamic shapes on other map
+			avgx = sumx/len(self.dyn_obs)
+			avgy = sumy/len(self.dyn_obs)
+			image2[avgx, avgy] = (0, 0, 255)
+			self.obstacle.append((avgx, avgy))
+			del self.dyn_obs[:]
 
 		for point in self.pose:
 			image[point[0], point[1]] = (255, 0, 0)
+		for point in self.obstacle:
+			image2[point[0], point[1]] = (0, 0, 255)
 
 
 		#draw it!
